@@ -2,6 +2,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Backend/Nakama/NexusNakamaCallbackProxy.h"
 #include "Interfaces/INexusBackendInterface.h"
 
 // Nakama SDK forward declares
@@ -64,6 +65,17 @@ public:
 
     ENexusNakamaAuthProvider GetActiveProvider() const { return ActiveProvider; }
 
+    // Auth callbacks
+    void HandleAuthSuccess(UNakamaSession* Session);
+    void HandleAuthError(const FNakamaError& Error);
+
+    // Account callbacks
+    void HandleGetAccountSuccess(const FNakamaAccount& Account);
+    void HandleGetAccountError(const FNakamaError& Error);
+
+    // Display name callbacks
+    void HandleSetDisplayNameSuccess();
+    void HandleSetDisplayNameError(const FNakamaError& Error);
 private:
     // ── Config ────────────────────────────────────────────────────────────────
     FString         Host;
@@ -84,18 +96,6 @@ private:
     void LoginWithSteam();
     void LoginWithDevice();
 
-    // Auth callbacks
-    UFUNCTION() void HandleAuthSuccess(UNakamaSession* Session);
-    UFUNCTION() void HandleAuthError(const FNakamaError& Error);
-
-    // Account callbacks
-    UFUNCTION() void HandleGetAccountSuccess(const FNakamaAccount& Account);
-    UFUNCTION() void HandleGetAccountError(const FNakamaError& Error);
-
-    // Display name callbacks
-    UFUNCTION() void HandleSetDisplayNameSuccess();
-    UFUNCTION() void HandleSetDisplayNameError(const FNakamaError& Error);
-
     // ── Session persistence ───────────────────────────────────────────────────
     bool TryRestoreSession();
     void SaveSession();
@@ -104,4 +104,7 @@ private:
     FString GetSteamAuthTicket() const;
     FString GetDeviceId() const;
     void    TrySetBestAvailableName();
+
+    TObjectPtr<UNexusNakamaBackendProxy> Proxy;
+    
 };

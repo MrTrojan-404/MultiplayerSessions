@@ -4,6 +4,7 @@
 #include "CoreMinimal.h"
 #include "Interfaces/INexusMatchCodeInterface.h"
 
+class UNexusNakamaMatchProxy;
 class UNakamaClient;
 class UNakamaSession;
 struct FNakamaError;
@@ -43,6 +44,16 @@ public:
     // Called by NexusMultiplayerSubsystem when session refreshes
     void UpdateSession(UNakamaSession* NewSession) { Session = NewSession; }
 
+    // Storage callbacks
+    void HandleStoreSuccess(const FNakamaStoreObjectAcks& Acks);
+    void HandleStoreError(const FNakamaError& Error);
+
+    void HandleLookupSuccess(const FNakamaStorageObjectList& Objects);
+    void HandleLookupError(const FNakamaError& Error);
+
+    void HandleDeleteSuccess();
+    void HandleDeleteError(const FNakamaError& Error);
+
 private:
     UNakamaClient*  Client  = nullptr;
     UNakamaSession* Session = nullptr;
@@ -53,15 +64,8 @@ private:
     // Pending code tracked for lookup response
     FString PendingLookupCode;
 
-    // Storage callbacks
-    UFUNCTION() void HandleStoreSuccess(const FNakamaStoreObjectAcks& Acks);
-    UFUNCTION() void HandleStoreError(const FNakamaError& Error);
-
-    UFUNCTION() void HandleLookupSuccess(const FNakamaStorageObjectList& Objects);
-    UFUNCTION() void HandleLookupError(const FNakamaError& Error);
-
-    UFUNCTION() void HandleDeleteSuccess();
-    UFUNCTION() void HandleDeleteError(const FNakamaError& Error);
-
     bool EnsureClientAndSession(const FString& CallerName) const;
+
+    TObjectPtr<UNexusNakamaMatchProxy> Proxy;
+
 };

@@ -4,7 +4,7 @@
 #include "CoreMinimal.h"
 #include "Core/NexusTypes.h"
 
-struct FOnlineSessionSearchResult;
+class FOnlineSessionSearchResult;
 
 class NEXUSMULTIPLAYER_API INexusOnlineInterface
 {

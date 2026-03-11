@@ -11,6 +11,10 @@
 		}
 	],
 	"Plugins": [
+      {
+        "Name": "NexusMultiplayer",
+        "Enabled": true
+      },
 		{
 			"Name": "ModelingToolsEditorMode",
 			"Enabled": true,
@@ -22,6 +26,10 @@
 			"Name": "OnlineSubsystemSteam",
 			"Enabled": true
 		},
+      {
+        "Name": "OnlineSubsystemUtils",
+        "Enabled": true
+      },
 		{
 			"Name": "SteamSockets",
 			"Enabled": true

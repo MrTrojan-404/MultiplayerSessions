@@ -7,7 +7,7 @@
 #include "OnlineSubsystemUtils.h"
 #include "Interfaces/OnlineIdentityInterface.h"
 #include "Kismet/GameplayStatics.h"
-#include "SaveGame/NexusNakamaSession.h"
+#include "Backend/Nakama/SaveGame/NexusNakamaSession.h"
 
 // ── Constructor ───────────────────────────────────────────────────────────────
 
@@ -33,6 +33,8 @@ FNexusNakamaBackend::FNexusNakamaBackend(
     {
         NEXUS_ERROR("[Nakama] Failed to create NakamaClient — check host/port/key");
     }
+    Proxy = NewObject<UNexusNakamaBackendProxy>(GetTransientPackage());
+    Proxy->Owner = this;
 }
 
 // ── Login ─────────────────────────────────────────────────────────────────────
@@ -90,10 +92,10 @@ void FNexusNakamaBackend::LoginWithSteam()
     ActiveProvider = ENexusNakamaAuthProvider::Steam;
 
     FOnAuthUpdate Success;
-    Success.AddRaw(this, &FNexusNakamaBackend::HandleAuthSuccess);
+    Success.AddDynamic(Proxy, &UNexusNakamaBackendProxy::OnAuthSuccess);
 
     FOnError Error;
-    Error.AddRaw(this, &FNexusNakamaBackend::HandleAuthError);
+    Error.AddDynamic(Proxy, &UNexusNakamaBackendProxy::OnAuthError);
 
     NakamaClient->AuthenticateSteam(
         Ticket,
@@ -114,10 +116,10 @@ void FNexusNakamaBackend::LoginWithDevice()
     ActiveProvider = ENexusNakamaAuthProvider::Device;
 
     FOnAuthUpdate Success;
-    Success.AddRaw(this, &FNexusNakamaBackend::HandleAuthSuccess);
+    Success.AddDynamic(Proxy, &UNexusNakamaBackendProxy::OnAuthSuccess);
 
     FOnError Error;
-    Error.AddRaw(this, &FNexusNakamaBackend::HandleAuthError);
+    Error.AddDynamic(Proxy, &UNexusNakamaBackendProxy::OnAuthError);
 
     NakamaClient->AuthenticateDevice(DeviceId, TEXT(""), true, {}, Success, Error);
 }
@@ -170,10 +172,10 @@ void FNexusNakamaBackend::FetchAccount()
         *UserSession->SessionData.Username);
 
     FOnUserAccountInfo Success;
-    Success.AddRaw(this, &FNexusNakamaBackend::HandleGetAccountSuccess);
+    Success.AddDynamic(Proxy, &UNexusNakamaBackendProxy::OnGetAccountSuccess);
 
     FOnError Error;
-    Error.AddRaw(this, &FNexusNakamaBackend::HandleGetAccountError);
+    Error.AddDynamic(Proxy, &UNexusNakamaBackendProxy::OnGetAccountError);
 
     NakamaClient->GetAccount(UserSession, Success, Error);
 }
@@ -220,10 +222,10 @@ void FNexusNakamaBackend::SetDisplayName(const FString& NewName)
     PendingDisplayName = NewName;
 
     FOnUpdateAccount Success;
-    Success.AddRaw(this, &FNexusNakamaBackend::HandleSetDisplayNameSuccess);
+    Success.AddDynamic(Proxy, &UNexusNakamaBackendProxy::OnUpdateAccountSuccess);
 
     FOnError Error;
-    Error.AddRaw(this, &FNexusNakamaBackend::HandleSetDisplayNameError);
+    Error.AddDynamic(Proxy, &UNexusNakamaBackendProxy::OnUpdateAccountError);
 
     NakamaClient->UpdateAccount(
         UserSession,

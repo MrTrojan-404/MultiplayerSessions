@@ -5,6 +5,7 @@
 #include "NakamaClient.h"
 #include "NakamaSession.h"
 #include "NakamaStorageObject.h"
+#include "Backend/Nakama/NexusNakamaCallbackProxy.h"
 
 const FString FNexusNakamaMatchCode::Collection   = TEXT("match_codes");
 const FString FNexusNakamaMatchCode::LookupUserId = TEXT("");
@@ -20,6 +21,11 @@ FNexusNakamaMatchCode::FNexusNakamaMatchCode(
     NEXUS_LOG("[NakamaMatchCode] Created. Client valid: %s | Session valid: %s",
         Client  ? TEXT("YES") : TEXT("NO"),
         Session ? TEXT("YES") : TEXT("NO"));
+
+    Proxy = NewObject<UNexusNakamaMatchProxy>(GetTransientPackage());
+    Proxy->Owner = this;
+
+    NEXUS_LOG("[NakamaMatchCode] Created.");
 }
 
 // ── StoreCode ─────────────────────────────────────────────────────────────────
@@ -41,14 +47,14 @@ void FNexusNakamaMatchCode::StoreCode(
     WriteObj.Collection     = Collection;
     WriteObj.Key            = Code;
     WriteObj.Value          = Payload;
-    WriteObj.PermissionRead = ENakamaStoragePermissionRead::PublicRead;
-    WriteObj.PermissionWrite = ENakamaStoragePermissionWrite::OwnerWrite;
+    WriteObj.PermissionRead = ENakamaStoragePermissionRead::PUBLIC_READ;
+    WriteObj.PermissionWrite = ENakamaStoragePermissionWrite::OWNER_WRITE;
 
     FOnStorageObjectAcks Success;
-    Success.AddRaw(this, &FNexusNakamaMatchCode::HandleStoreSuccess);
+    Success.AddDynamic(Proxy, &UNexusNakamaMatchProxy::OnStoreSuccess);
 
     FOnError Error;
-    Error.AddRaw(this, &FNexusNakamaMatchCode::HandleStoreError);
+    Error.AddDynamic(Proxy, &UNexusNakamaMatchProxy::OnStoreError);
 
     Client->WriteStorageObjects(Session, {WriteObj}, Success, Error);
 }
@@ -101,10 +107,10 @@ void FNexusNakamaMatchCode::LookupCode(const FString& Code)
     ReadId.UserId     = LookupUserId;
 
     FOnStorageObjectsRead Success;
-    Success.AddRaw(this, &FNexusNakamaMatchCode::HandleLookupSuccess);
+    Success.AddDynamic(Proxy, &UNexusNakamaMatchProxy::OnLookupSuccess);
 
     FOnError Error;
-    Error.AddRaw(this, &FNexusNakamaMatchCode::HandleLookupError);
+    Error.AddDynamic(Proxy, &UNexusNakamaMatchProxy::OnLookupError);
 
     Client->ReadStorageObjects(Session, {ReadId}, Success, Error);
 }
@@ -164,21 +170,25 @@ void FNexusNakamaMatchCode::DeleteCode(const FString& Code)
 {
     if (!EnsureClientAndSession(TEXT("DeleteCode"))) return;
 
-    NEXUS_LOG("[NakamaMatchCode] DeleteCode: removing code '%s' from Nakama storage",
-        *Code);
+    NEXUS_LOG("[NakamaMatchCode] DeleteCode: removing code '%s' from Nakama storage", *Code);
 
     FNakamaDeleteStorageObjectId DeleteId;
     DeleteId.Collection = Collection;
     DeleteId.Key        = Code;
 
-    FOnError Error;
-    Error.AddRaw(this, &FNexusNakamaMatchCode::HandleDeleteError);
+    // SDK takes TFunction directly — no delegate type needed
+    TFunction<void()> Success = [this, Code]()
+    {
+        NEXUS_SUCCESS("[NakamaMatchCode] Match code '%s' deleted from Nakama storage", *Code);
+    };
 
-    // Nakama SDK: DeleteStorageObjects doesn't have a success callback in all versions
-    // — use the void overload and log via error only
-    Client->DeleteStorageObjects(Session, {DeleteId}, 
-        FOnAck::CreateRaw(this, &FNexusNakamaMatchCode::HandleDeleteSuccess),
-        Error);
+    TFunction<void(const FNakamaError&)> Error = [this](const FNakamaError& Err)
+    {
+        // Non-fatal — leftover codes expire or get overwritten
+        NEXUS_WARN("[NakamaMatchCode] DeleteCode failed (non-fatal): %s", *Err.Message);
+    };
+
+    Client->DeleteStorageObjects(Session, {DeleteId}, Success, Error);
 }
 
 void FNexusNakamaMatchCode::HandleDeleteSuccess()
