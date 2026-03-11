@@ -25,7 +25,9 @@ public class NexusMultiplayer : ModuleRules
 		PublicDependencyModuleNames.AddRange(
 			new string[]
 			{
-				"Core",
+				"Core", "OnlineSubsystem", "OnlineSubsystemSteam",
+				"NakamaUnreal"
+				
 				// ... add other public dependencies that you statically link with here ...
 			}
 			);
