@@ -232,6 +232,7 @@ void UNexusMultiplayerSubsystem::HostSession(FNexusSessionConfig Config)
         OnSessionFailed.Broadcast(TEXT("Online layer not initialized"));
         return;
     }
+    OnlineLayer->SetLANMode(NetworkMode == ENexusNetworkMode::LAN);
 
     NEXUS_LOG("[Subsystem] HostSession called. Players=%d | Map=%s | Private=%s | Type=%s",
         Config.MaxPlayers,
@@ -255,6 +256,8 @@ void UNexusMultiplayerSubsystem::FindSessions(int32 MaxResults)
         OnSessionFailed.Broadcast(TEXT("Online layer not initialized"));
         return;
     }
+
+    OnlineLayer->SetLANMode(NetworkMode == ENexusNetworkMode::LAN);
 
     NEXUS_LOG("[Subsystem] FindSessions called. MaxResults=%d", MaxResults);
     OnlineLayer->FindSessions(MaxResults);
@@ -293,21 +296,50 @@ void UNexusMultiplayerSubsystem::JoinSessionFromRow(const FNexusServerRow& Row)
         OnSessionFailed.Broadcast(TEXT("Online layer not initialized"));
         return;
     }
-
-    NEXUS_LOG("[Subsystem] JoinSessionFromRow: SessionId='%s' Host='%s'",
+ 
+    // LAN direct join — bypass OSS, ClientTravel to host IP
+    if (!Row.HostAddress.IsEmpty())
+    {
+        NEXUS_LOG("[Subsystem] JoinSessionFromRow: LAN join → %s", *Row.HostAddress);
+ 
+        bIsHost = false;
+ 
+        UWorld* W = GetWorld();
+        APlayerController* PC = W ? W->GetFirstPlayerController() : nullptr;
+        if (!PC)
+        {
+            NEXUS_ERROR("[Subsystem] JoinSessionFromRow: no PlayerController");
+            OnSessionFailed.Broadcast(TEXT("No PlayerController for ClientTravel"));
+            return;
+        }
+ 
+        OnSessionJoined.Broadcast(true);
+        PC->ClientTravel(Row.HostAddress, TRAVEL_Absolute);
+        return;
+    }
+ 
+    // OSS join (Steam etc.)
+    NEXUS_LOG("[Subsystem] JoinSessionFromRow: OSS join — SessionId='%s' Host='%s'",
         *Row.SessionId, *Row.HostName);
-
+ 
     const FOnlineSessionSearchResult* Result = FindResultBySessionId(Row.SessionId);
     if (!Result)
     {
-        NEXUS_ERROR("[Subsystem] JoinSessionFromRow: session '%s' not in cache — did FindSessions run first?",
-            *Row.SessionId);
+        NEXUS_ERROR("[Subsystem] JoinSessionFromRow: session '%s' not in cache — "
+            "did FindSessions run first?", *Row.SessionId);
         OnSessionFailed.Broadcast(TEXT("Session not found — please refresh the server list"));
         return;
     }
-
+ 
     bIsHost = false;
     OnlineLayer->JoinSession(*Result);
+}
+
+void UNexusMultiplayerSubsystem::SetNetworkMode(ENexusNetworkMode NewMode)
+{
+    NetworkMode = NewMode;
+    NEXUS_LOG("[Subsystem] NetworkMode set to: %s",
+        NewMode == ENexusNetworkMode::LAN ? TEXT("LAN") : TEXT("Internet"));
 }
 
 void UNexusMultiplayerSubsystem::LeaveSession()
@@ -391,8 +423,30 @@ void UNexusMultiplayerSubsystem::HandleCreateComplete(bool bSuccess)
 void UNexusMultiplayerSubsystem::HandleFindComplete(
     const TArray<FOnlineSessionSearchResult>& Results, bool bSuccess)
 {
+    TArray<FNexusServerRow> Rows;
+ 
+    // Custom discovery path (e.g. FNexusNullOnline UDP)
+    if (OnlineLayer && OnlineLayer->UsesCustomDiscovery())
+    {
+        OnlineLayer->GetDiscoveredRows(Rows);
+ 
+        NEXUS_LOG("[Subsystem] FindSessions (custom): %d session(s) discovered", Rows.Num());
+ 
+        if (Rows.IsEmpty())
+        {
+            NEXUS_WARN("[Subsystem] FindSessions: no LAN sessions found");
+            OnSessionListReady.Broadcast({});
+        }
+        else
+        {
+            OnSessionListReady.Broadcast(Rows);
+        }
+        return;
+    }
+ 
+    // OSS path (Steam etc.)
     CachedSearchResults = Results;
-
+ 
     if (!bSuccess || Results.Num() == 0)
     {
         NEXUS_WARN("[Subsystem] FindSessions: no results or failed. Count=%d Success=%s",
@@ -400,14 +454,13 @@ void UNexusMultiplayerSubsystem::HandleFindComplete(
         OnSessionListReady.Broadcast({});
         return;
     }
-
-    NEXUS_SUCCESS("[Subsystem] FindSessions complete: %d sessions found", Results.Num());
-
-    TArray<FNexusServerRow> Rows;
+ 
+    NEXUS_SUCCESS("[Subsystem] FindSessions complete: %d session(s) found", Results.Num());
+ 
     Rows.Reserve(Results.Num());
     for (const FOnlineSessionSearchResult& Result : Results)
         Rows.Add(MakeServerRow(Result));
-
+ 
     OnSessionListReady.Broadcast(Rows);
 }
 

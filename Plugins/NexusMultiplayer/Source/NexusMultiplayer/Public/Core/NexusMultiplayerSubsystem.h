@@ -105,6 +105,12 @@ public:
         return S->BackendMode == ENexusBackendMode::Nakama
             || S->OnlineMode == ENexusOnlineMode::Steam;
     }
+
+    UFUNCTION(BlueprintCallable, Category = "Nexus|Settings")
+    void SetNetworkMode(ENexusNetworkMode NewMode);
+
+    UFUNCTION(BlueprintPure, Category = "Nexus|Settings")
+    ENexusNetworkMode GetNetworkMode() const { return NetworkMode; }
     
 private:
     // ── Layer instances ───────────────────────────────────────────────────────
@@ -153,5 +159,6 @@ private:
     const FOnlineSessionSearchResult* FindResultBySessionId(const FString& SessionId) const;
     void TravelToSession();
     
-    
+    ENexusNetworkMode NetworkMode = ENexusNetworkMode::Internet;
+
 };

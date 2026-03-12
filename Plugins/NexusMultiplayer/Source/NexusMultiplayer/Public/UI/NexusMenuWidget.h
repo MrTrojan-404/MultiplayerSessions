@@ -106,6 +106,9 @@ public:
     UPROPERTY(meta = (BindWidgetOptional))
     TObjectPtr<UWidgetSwitcher> MenuSwitcher;
 
+    UPROPERTY(meta = (BindWidgetOptional))
+    TObjectPtr<UCheckBox> LANCheckBox;
+
     // ── Config ────────────────────────────────────────────────────────────────
 
     // Assign your WBP_NexusServerRow Blueprint subclass here
@@ -173,5 +176,7 @@ private:
 
     UFUNCTION()
     void HandleMapSelectionChanged(FString SelectedItem, ESelectInfo::Type SelectionType);
-    
+
+    UFUNCTION()
+    void HandleLANCheckboxChanged(bool bIsChecked);
 };

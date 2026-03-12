@@ -2,6 +2,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "OnlineSessionSettings.h"
 #include "NexusTypes.generated.h"
 
 // ─── Enums ────────────────────────────────────────────────────────────────────
@@ -113,6 +114,12 @@ struct FNexusServerRow
     UPROPERTY(BlueprintReadOnly, Category = "Nexus|ServerRow")
     FString MapName;
 
+    // LAN only — "IP:Port" for ClientTravel direct join. Empty for Steam/OSS sessions.
+    UPROPERTY(BlueprintReadOnly) FString HostAddress;
+
+    // Not exposed to Blueprint — OSS search result for Steam joins
+    FOnlineSessionSearchResult SearchResult;
+    
     // Helper — "2 / 4"
     FString GetPlayerCountString() const
     {
@@ -173,6 +180,13 @@ struct FNexusMapEntry
     // Optional: thumbnail shown in map picker
     UPROPERTY(EditAnywhere, BlueprintReadWrite)
     TObjectPtr<UTexture2D> Thumbnail = nullptr;
+};
+
+UENUM(BlueprintType)
+enum class ENexusNetworkMode : uint8
+{
+    Internet UMETA(DisplayName = "Internet"),
+    LAN      UMETA(DisplayName = "LAN")
 };
 
 // ─── Delegates ────────────────────────────────────────────────────────────────

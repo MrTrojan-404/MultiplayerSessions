@@ -65,10 +65,16 @@ FString FNexusSteamOnline::GetAuthTicket() const
 
 bool FNexusSteamOnline::IsAvailable() const
 {
-    IOnlineSubsystem* OSS = Online::GetSubsystem(GetWorld());
-    return OSS && OSS->GetSubsystemName() == FName("Steam");
-}
+    IOnlineSubsystem* OSS = IOnlineSubsystem::Get();
+    if (!OSS) return false;
 
+    // OSS loads even without Steam client running — verify client is actually up
+    IOnlineIdentityPtr Identity = OSS->GetIdentityInterface();
+    if (!Identity.IsValid()) return false;
+
+    const ELoginStatus::Type Status = Identity->GetLoginStatus(0);
+    return Status != ELoginStatus::NotLoggedIn;
+}
 // ── Create ────────────────────────────────────────────────────────────────────
 
 void FNexusSteamOnline::CreateSession(const FNexusSessionConfig& Config)
@@ -114,34 +120,32 @@ void FNexusSteamOnline::CreateSessionInternal(
         if (OnCreateComplete) OnCreateComplete(false);
         return;
     }
-
-    // ── LAN detection — use settings flag, NOT OSS name ──────────────────────
-    const UNexusMultiplayerSettings* S = UNexusMultiplayerSettings::Get();
-    const bool bLAN = S && S->OnlineMode == ENexusOnlineMode::Null;
-
-    NEXUS_LOG("[SteamOnline] CreateSessionInternal: LAN=%s", bLAN ? TEXT("YES") : TEXT("NO"));
+    
+    NEXUS_LOG("[SteamOnline] CreateSessionInternal: LAN=%s", bIsLAN ? TEXT("YES") : TEXT("NO"));
 
     CreateSessionHandle =
         SessionInterface->AddOnCreateSessionCompleteDelegate_Handle(OnCreateDelegate);
 
     LastSessionSettings = MakeShareable(new FOnlineSessionSettings());
-    LastSessionSettings->bIsLANMatch            = bLAN;
-    LastSessionSettings->NumPublicConnections   = NumPlayers;
-    LastSessionSettings->bAllowJoinInProgress   = true;
-    LastSessionSettings->bAllowJoinViaPresence  = !bLAN && !bPrivate;
-    LastSessionSettings->bShouldAdvertise       = !bPrivate;
-    LastSessionSettings->bUsesPresence          = !bLAN;
-    LastSessionSettings->bUseLobbiesIfAvailable = !bLAN;
-    LastSessionSettings->BuildUniqueId          = 1;
+    LastSessionSettings->bIsLANMatch = bIsLAN;
+    LastSessionSettings->NumPublicConnections = NumPlayers;
+    LastSessionSettings->bAllowJoinInProgress = true;
+    LastSessionSettings->bAllowJoinViaPresence = !bIsLAN && !bPrivate;
+    LastSessionSettings->bShouldAdvertise = !bPrivate;
+    LastSessionSettings->bUsesPresence = !bIsLAN;
+    LastSessionSettings->bUseLobbiesIfAvailable = !bIsLAN;
+    LastSessionSettings->BuildUniqueId = 1;
     LastSessionSettings->Set(FName("MatchType"), MatchType,
-        bLAN ? EOnlineDataAdvertisementType::ViaPingOnly
-             : EOnlineDataAdvertisementType::ViaOnlineServiceAndPing);
+                             bIsLAN
+                                 ? EOnlineDataAdvertisementType::ViaPingOnly
+                                 : EOnlineDataAdvertisementType::ViaOnlineServiceAndPing);
 
     FString DisplayName = GetDisplayName();
     if (!DisplayName.IsEmpty())
         LastSessionSettings->Set(FName("HostDisplayName"), DisplayName,
-            bLAN ? EOnlineDataAdvertisementType::ViaPingOnly
-                 : EOnlineDataAdvertisementType::ViaOnlineServiceAndPing);
+                                 bIsLAN
+                                     ? EOnlineDataAdvertisementType::ViaPingOnly
+                                     : EOnlineDataAdvertisementType::ViaOnlineServiceAndPing);
 
     const bool bCalled = SessionInterface->CreateSession(
         *PlayerId, NAME_GameSession, *LastSessionSettings);
@@ -166,21 +170,21 @@ void FNexusSteamOnline::FindSessions(int32 MaxResults)
 
     // ── LAN detection — use settings flag, NOT OSS name ──────────────────────
     const UNexusMultiplayerSettings* S = UNexusMultiplayerSettings::Get();
-    const bool bLAN = S && S->OnlineMode == ENexusOnlineMode::Null;
 
     NEXUS_LOG("[SteamOnline] FindSessions: Max=%d | LAN=%s",
-        MaxResults, bLAN ? TEXT("YES") : TEXT("NO"));
+        MaxResults, bIsLAN ? TEXT("YES") : TEXT("NO"));
 
     FindSessionsHandle =
         SessionInterface->AddOnFindSessionsCompleteDelegate_Handle(OnFindDelegate);
 
     LastSessionSearch = MakeShareable(new FOnlineSessionSearch());
     LastSessionSearch->MaxSearchResults = FMath::Clamp(MaxResults, 1, 200);
-    LastSessionSearch->bIsLanQuery      = bLAN;
 
-    if (!bLAN)
-        LastSessionSearch->QuerySettings.Set(SEARCH_LOBBIES, true, EOnlineComparisonOp::Equals);
-
+    LastSessionSearch->bIsLanQuery = bIsLAN;
+    if (!bIsLAN)
+        LastSessionSearch->QuerySettings.Set(
+            SEARCH_LOBBIES, true, EOnlineComparisonOp::Equals);
+    
     if (!SessionInterface->FindSessions(*PlayerId, LastSessionSearch.ToSharedRef()))
     {
         SessionInterface->ClearOnFindSessionsCompleteDelegate_Handle(FindSessionsHandle);
@@ -201,10 +205,7 @@ void FNexusSteamOnline::FindSessionByAttribute(const FString& Key, const FString
 
     FindSessionsHandle =
         SessionInterface->AddOnFindSessionsCompleteDelegate_Handle(OnFindDelegate);
-
-    IOnlineSubsystem* OSS = IOnlineSubsystem::Get();
-    const bool bIsLAN = OSS && OSS->GetSubsystemName() == "NULL";
-
+    
     LastSessionSearch = MakeShareable(new FOnlineSessionSearch());
     LastSessionSearch->MaxSearchResults = 200;
     LastSessionSearch->bIsLanQuery      = bIsLAN;
@@ -230,10 +231,7 @@ void FNexusSteamOnline::JoinSessionById(const FString& SessionId)
 
     FindSessionsHandle =
         SessionInterface->AddOnFindSessionsCompleteDelegate_Handle(OnFindDelegate);
-
-    IOnlineSubsystem* OSS = Online::GetSubsystem(GetWorld());
-    const bool bIsLAN = OSS && OSS->GetSubsystemName() == "NULL";
-
+    
     LastSessionSearch = MakeShareable(new FOnlineSessionSearch());
     LastSessionSearch->MaxSearchResults = 200;
     LastSessionSearch->bIsLanQuery      = bIsLAN;

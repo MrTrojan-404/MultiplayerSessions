@@ -87,6 +87,16 @@ void UNexusMenuWidget::NativeConstruct()
         HostingBackButton->OnClicked.AddDynamic(
             this, &UNexusMenuWidget::HandleBackClicked);
 
+    if (LANCheckBox)
+    {
+        // Seed from subsystem's current mode
+        LANCheckBox->SetIsChecked(
+            Sub->GetNetworkMode() == ENexusNetworkMode::LAN);
+
+        LANCheckBox->OnCheckStateChanged.AddDynamic(
+            this, &UNexusMenuWidget::HandleLANCheckboxChanged);
+    }
+
     // ── Bind subsystem delegates ──────────────────────────────────────────
 
     Sub->OnSessionCreated.AddDynamic(
@@ -469,4 +479,23 @@ void UNexusMenuWidget::HandleMapSelectionChanged(
             return;
         }
     }
+}
+
+void UNexusMenuWidget::HandleLANCheckboxChanged(bool bIsChecked)
+{
+    UNexusMultiplayerSubsystem* Sub = GetSubsystem();
+    if (!Sub) return;
+
+    Sub->SetNetworkMode(bIsChecked
+        ? ENexusNetworkMode::LAN
+        : ENexusNetworkMode::Internet);
+
+    // Hide/show JoinByCode based on mode + support
+    const bool bShowCode = !bIsChecked && Sub->IsJoinByCodeSupported();
+    if (JoinByCodeButton) JoinByCodeButton->SetVisibility(
+        bShowCode ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+    if (CodeInputBox) CodeInputBox->SetVisibility(
+        bShowCode ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+
+    NEXUS_LOG("[MenuWidget] LAN mode: %s", bIsChecked ? TEXT("ON") : TEXT("OFF"));
 }

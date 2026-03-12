@@ -39,6 +39,8 @@ public class NexusMultiplayer : ModuleRules
             "Slate",
             "SlateCore",
             "UMG",
+            "Sockets",
+            "Networking",
         });
 
         // ── Steam ─────────────────────────────────────────────────────────────
