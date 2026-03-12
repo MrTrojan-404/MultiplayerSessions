@@ -13,20 +13,31 @@ class UEditableTextBox;
 class UScrollBox;
 class UTextBlock;
 class UWidgetSwitcher;
+class UCheckBox;
 
 /**
  * UNexusMenuWidget
  *
- * Main menu widget. Handles host, find, join-by-code, and server browser.
+ * Full-screen menu widget. The MenuSwitcher IS the root — it fills the entire
+ * canvas and swaps between four full-screen panels:
  *
- * In your UMG Blueprint subclass bind:
- *   Buttons:   HostButton, FindButton, JoinByCodeButton, RefreshButton
- *   Inputs:    CodeInputBox, MaxPlayersBox, MatchTypeBox, LobbyMapBox
- *   Display:   DisplayNameText, StatusText, MatchCodeDisplay
- *   Lists:     ServerListScrollBox
- *   Switcher:  MenuSwitcher (0=Main, 1=ServerBrowser, 2=Hosting, 3=Loading)
+ *   0 = Main      — Host / Find / JoinByCode
+ *   1 = Browser   — Server list results
+ *   2 = Hosting   — Session config inputs before hosting
+ *   3 = Loading   — Any async operation in progress
  *
- * Set ServerRowWidgetClass to your UNexusServerRowWidget Blueprint subclass.
+ * Required UMG bindings (exact names):
+ *   HostButton, FindButton, JoinByCodeButton, RefreshButton,
+ *   ConfirmHostButton, BackButton,
+ *   CodeInputBox, ServerListScrollBox, StatusText
+ *
+ * Optional UMG bindings:
+ *   MaxPlayersBox, MatchTypeBox, LobbyMapBox, PrivateCheckBox,
+ *   DisplayNameText, MatchCodeDisplay, MenuSwitcher
+ *
+ * Blueprint defaults to set:
+ *   ServerRowWidgetClass — your WBP_NexusServerRow subclass
+ *   DefaultSessionConfig — fallback values if inputs are blank
  */
 UCLASS(Abstract)
 class NEXUSMULTIPLAYER_API UNexusMenuWidget : public UUserWidget
@@ -34,7 +45,8 @@ class NEXUSMULTIPLAYER_API UNexusMenuWidget : public UUserWidget
     GENERATED_BODY()
 
 public:
-    // ── UMG Bindings ─────────────────────────────────────────────────────────
+
+    // ── Required bindings ─────────────────────────────────────────────────────
 
     UPROPERTY(meta = (BindWidget))
     TObjectPtr<UButton> HostButton;
@@ -48,111 +60,118 @@ public:
     UPROPERTY(meta = (BindWidget))
     TObjectPtr<UButton> RefreshButton;
 
+    // On Panel_Hosting — confirms config and starts session
+    UPROPERTY(meta = (BindWidget))
+    TObjectPtr<UButton> ConfirmHostButton;
+
+    // On Panel_Browser / Panel_Hosting — returns to Main
+    UPROPERTY(meta = (BindWidgetOptional))
+    TObjectPtr<UButton> BrowserBackButton;   // on Panel_Browser
+
+    UPROPERTY(meta = (BindWidgetOptional))
+    TObjectPtr<UButton> HostingBackButton;
+    
     // Code input for join-by-code
     UPROPERTY(meta = (BindWidget))
     TObjectPtr<UEditableTextBox> CodeInputBox;
 
-    // Optional session config inputs — leave blank for defaults
+    // Server results list (Panel_Browser)
+    UPROPERTY(meta = (BindWidget))
+    TObjectPtr<UScrollBox> ServerListScrollBox;
+
+    // Status / error messages (Panel_Loading + Panel_Browser)
+    UPROPERTY(meta = (BindWidget))
+    TObjectPtr<UTextBlock> StatusText;
+
+    // ── Optional bindings ─────────────────────────────────────────────────────
+
+    // Session config inputs on Panel_Hosting
     UPROPERTY(meta = (BindWidgetOptional))
     TObjectPtr<UEditableTextBox> MaxPlayersBox;
 
     UPROPERTY(meta = (BindWidgetOptional))
-    TObjectPtr<UEditableTextBox> MatchTypeBox;
+    TObjectPtr<class UComboBoxString> MatchTypeCombo;
 
     UPROPERTY(meta = (BindWidgetOptional))
-    TObjectPtr<UEditableTextBox> LobbyMapBox;
+    TObjectPtr<UComboBoxString> MapCombo;
 
-    // Private session checkbox
     UPROPERTY(meta = (BindWidgetOptional))
-    TObjectPtr<class UCheckBox> PrivateCheckBox;
+    TObjectPtr<UCheckBox> PrivateCheckBox;
 
-    // Server list container
-    UPROPERTY(meta = (BindWidget))
-    TObjectPtr<UScrollBox> ServerListScrollBox;
-
-    // Status / error display
-    UPROPERTY(meta = (BindWidget))
-    TObjectPtr<UTextBlock> StatusText;
-
-    // Local player's display name
+    // Logged-in player name (Panel_Main top bar)
     UPROPERTY(meta = (BindWidgetOptional))
     TObjectPtr<UTextBlock> DisplayNameText;
 
-    // Shows the generated match code after hosting a private session
-    UPROPERTY(meta = (BindWidgetOptional))
-    TObjectPtr<UTextBlock> MatchCodeDisplay;
-
-    // 0=Main 1=ServerBrowser 2=Hosting 3=Loading
+    // Root panel switcher — covers full screen, swaps between 4 panels
     UPROPERTY(meta = (BindWidgetOptional))
     TObjectPtr<UWidgetSwitcher> MenuSwitcher;
 
     // ── Config ────────────────────────────────────────────────────────────────
 
-    // Assign your UNexusServerRowWidget Blueprint subclass here in the editor
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Nexus|Config",
-        meta = (DisplayName = "Server Row Widget Class"))
+    // Assign your WBP_NexusServerRow Blueprint subclass here
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Nexus|Config")
     TSubclassOf<UNexusServerRowWidget> ServerRowWidgetClass;
 
-    // Default session config — overridden by input box values if present
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Nexus|Config",
-        meta = (DisplayName = "Default Session Config"))
+    // Fallback values — overridden by input box values when filled
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Nexus|Config")
     FNexusSessionConfig DefaultSessionConfig;
 
+    // Set these in Blueprint defaults — defines what maps appear in the picker
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Nexus|Config")
+    TArray<FNexusMapEntry> AvailableMaps;
 protected:
+
     virtual void NativeConstruct() override;
-    virtual void NativeDestruct() override;
+    virtual void NativeDestruct()  override;
 
 private:
-    // ── Subsystem ─────────────────────────────────────────────────────────────
+
+    // ── Subsystem ref ─────────────────────────────────────────────────────────
 
     TWeakObjectPtr<UNexusMultiplayerSubsystem> Subsystem;
     UNexusMultiplayerSubsystem* GetSubsystem() const;
 
     // ── Button handlers ───────────────────────────────────────────────────────
 
-    UFUNCTION()
-    void HandleHostClicked();
-
-    UFUNCTION()
-    void HandleFindClicked();
-
-    UFUNCTION()
-    void HandleJoinByCodeClicked();
-
-    UFUNCTION()
-    void HandleRefreshClicked();
+    UFUNCTION() void HandleHostClicked();
+    UFUNCTION() void HandleFindClicked();
+    UFUNCTION() void HandleJoinByCodeClicked();
+    UFUNCTION() void HandleRefreshClicked();
+    UFUNCTION() void HandleConfirmHostClicked();
+    UFUNCTION() void HandleBackClicked();
 
     // ── Subsystem delegate handlers ───────────────────────────────────────────
 
-    UFUNCTION()
-    void HandleSessionCreated(bool bWasSuccessful);
-
-    UFUNCTION()
-    void HandleSessionJoined(bool bWasSuccessful);
-
-    UFUNCTION()
-    void HandleSessionFailed(const FString& Error);
-
-    UFUNCTION()
-    void HandleSessionListReady(const TArray<FNexusServerRow>& Rows);
-
-    UFUNCTION()
-    void HandleMatchCodeReady(const FString& Code);
-
-    UFUNCTION()
-    void HandleDisplayNameReady(const FString& Name);
+    UFUNCTION() void HandleSessionCreated(bool bWasSuccessful);
+    UFUNCTION() void HandleSessionJoined(bool bWasSuccessful);
+    UFUNCTION() void HandleSessionFailed(const FString& Error);
+    UFUNCTION() void HandleSessionListReady(const TArray<FNexusServerRow>& Rows);
+    UFUNCTION() void HandleDisplayNameReady(const FString& Name);
 
     // ── Server row handler ────────────────────────────────────────────────────
 
-    UFUNCTION()
-    void HandleServerRowClicked(const TArray<FNexusServerRow>& Rows);
+    UFUNCTION() void HandleServerRowClicked(const TArray<FNexusServerRow>& Rows);
 
-    // ── Helpers ───────────────────────────────────────────────────────────────
+    // ── Panel helpers ─────────────────────────────────────────────────────────
+
+    // Panels: 0=Main 1=Browser 2=Hosting 3=Loading
+    void ShowMain();
+    void ShowBrowser();
+    void ShowHosting();
+    void ShowLoading(const FString& Message);
+
+    // ── Other helpers ─────────────────────────────────────────────────────────
 
     void SetStatus(const FString& Message, FLinearColor Color = FLinearColor::White);
-    void SetLoadingState(bool bLoading);
+    void SetButtonsEnabled(bool bEnabled);
     void ClearServerList();
     void PopulateServerList(const TArray<FNexusServerRow>& Rows);
     FNexusSessionConfig BuildSessionConfig() const;
-    void ShowPanel(int32 Index);
+
+    // Tracks whichever map the player selected on Panel_Hosting
+    FNexusMapEntry SelectedMap;
+
+    UFUNCTION()
+    void HandleMapSelectionChanged(FString SelectedItem, ESelectInfo::Type SelectionType);
+    
 };

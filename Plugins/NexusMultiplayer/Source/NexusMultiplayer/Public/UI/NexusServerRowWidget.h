@@ -54,6 +54,9 @@ public:
     UPROPERTY(meta = (BindWidget))
     TObjectPtr<class UTextBlock> MatchTypeText;
 
+    UPROPERTY(meta = (BindWidgetOptional))
+    TObjectPtr<UTextBlock> MapNameText;
+
     // Click handler — wire this to your UMG button's OnClicked
     UFUNCTION(BlueprintCallable, Category = "Nexus|ServerRow")
     void OnRowClicked();

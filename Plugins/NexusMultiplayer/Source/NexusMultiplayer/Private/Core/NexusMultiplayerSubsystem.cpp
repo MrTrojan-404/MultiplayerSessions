@@ -22,6 +22,7 @@
 #include "Engine/World.h"
 #include "Engine/GameInstance.h"
 #include "OnlineSessionSettings.h"
+#include "Interfaces/OnlineIdentityInterface.h"
 
 // ─── Init / Deinit ────────────────────────────────────────────────────────────
 
@@ -612,4 +613,32 @@ const FOnlineSessionSearchResult* UNexusMultiplayerSubsystem::FindResultBySessio
         if (Result.GetSessionIdStr() == SessionId)
             return &Result;
     return nullptr;
+}
+
+FString UNexusMultiplayerSubsystem::GetLocalUserId() const
+{
+    // Try backend user ID first (Nakama/Platform)
+    if (BackendLayer)
+    {
+        const FString BackendId = BackendLayer->GetBackendUserId();
+        if (!BackendId.IsEmpty())
+            return BackendId;
+    }
+
+    // Fall back to online subsystem unique net ID
+    IOnlineSubsystem* OSS = IOnlineSubsystem::Get();
+    if (OSS)
+    {
+        IOnlineIdentityPtr Identity = OSS->GetIdentityInterface();
+        if (Identity.IsValid())
+        {
+            TSharedPtr<const FUniqueNetId> Id =
+                Identity->GetUniquePlayerId(0);
+            if (Id.IsValid())
+                return Id->ToString();
+        }
+    }
+
+    // Last resort — machine login ID
+    return FPlatformMisc::GetLoginId();
 }

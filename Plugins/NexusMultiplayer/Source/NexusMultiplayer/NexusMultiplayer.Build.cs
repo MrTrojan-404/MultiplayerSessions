@@ -84,10 +84,9 @@ public class NexusMultiplayer : ModuleRules
         bool bEnableNakama = true;
         if (bEnableNakama)
         {
-            PrivateDependencyModuleNames.AddRange(new string[]
+            PublicDependencyModuleNames.AddRange(new string[]
             {
-                "NakamaUnreal",  // UNakamaClient, UNakamaSession, delegates
-                "NakamaCore",    // FNakamaError, FNakamaAccount, storage types
+                "NakamaUnreal"
             });
             PublicDefinitions.Add("NEXUS_NAKAMA_ENABLED=1");
         }

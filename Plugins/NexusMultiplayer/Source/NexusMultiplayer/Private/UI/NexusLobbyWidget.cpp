@@ -1,15 +1,15 @@
 // Copyright NexusMultiplayer. All Rights Reserved.
 
 #include "UI/NexusLobbyWidget.h"
-#include "Core/NexusLog.h"
+#include "GameState/NexusLobbyGameState.h"
 #include "Core/NexusMultiplayerSubsystem.h"
-#include "GameState//NexusLobbyGameState.h"
-#include "Components/TextBlock.h"
-#include "Components/ScrollBox.h"
-#include "Components/VerticalBox.h"
+#include "Core/NexusLog.h"
+#include "Core/NexusTypes.h"
 #include "Components/Button.h"
-#include "Kismet/GameplayStatics.h"
-#include "Engine/World.h"
+#include "Components/TextBlock.h"
+#include "Components/VerticalBox.h"
+#include "GameFramework/GameStateBase.h"
+#include "GameState/NexusLobbyGameState.h"
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 
@@ -19,137 +19,157 @@ void UNexusLobbyWidget::NativeConstruct()
 
     NEXUS_LOG("[LobbyWidget] NativeConstruct");
 
-    UGameInstance* GI = GetGameInstance();
-    if (!GI)
+    // ── Input mode ────────────────────────────────────────────────────────
+
+    if (APlayerController* PC = GetOwningPlayer())
     {
-        NEXUS_ERROR("[LobbyWidget] GameInstance null");
-        return;
+        // Game + UI so the player can still look around in the lobby
+        FInputModeGameAndUI InputMode;
+        InputMode.SetWidgetToFocus(TakeWidget());
+        InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+        InputMode.SetHideCursorDuringCapture(false);
+        PC->SetInputMode(InputMode);
+        PC->SetShowMouseCursor(true);
     }
 
-    UNexusMultiplayerSubsystem* Sub =
-        GI->GetSubsystem<UNexusMultiplayerSubsystem>();
-    if (!Sub)
+    // ── Subsystem ─────────────────────────────────────────────────────────
+
+    if (UGameInstance* GI = GetGameInstance())
     {
-        NEXUS_ERROR("[LobbyWidget] NexusMultiplayerSubsystem not found");
-        return;
+        UNexusMultiplayerSubsystem* Sub =
+            GI->GetSubsystem<UNexusMultiplayerSubsystem>();
+
+        if (Sub)
+        {
+            Subsystem = Sub;
+            Sub->OnSessionFailed.AddDynamic(
+                this, &UNexusLobbyWidget::HandleSessionFailed);
+        }
+        else
+        {
+            NEXUS_ERROR("[LobbyWidget] NexusMultiplayerSubsystem not found");
+        }
     }
 
-    Subsystem = Sub;
-
-    // ── Bind buttons ──────────────────────────────────────────────────────
-
-    if (StartButton)
-        StartButton->OnClicked.AddDynamic(this, &UNexusLobbyWidget::HandleStartClicked);
+    // ── Buttons ───────────────────────────────────────────────────────────
 
     if (LeaveButton)
-        LeaveButton->OnClicked.AddDynamic(this, &UNexusLobbyWidget::HandleLeaveClicked);
+        LeaveButton->OnClicked.AddDynamic(
+            this, &UNexusLobbyWidget::HandleLeaveClicked);
 
-    // ── Bind subsystem delegates ──────────────────────────────────────────
+    if (StartButton)
+        StartButton->OnClicked.AddDynamic(
+            this, &UNexusLobbyWidget::HandleStartClicked);
 
-    Sub->OnMatchCodeReady.AddDynamic(this,  &UNexusLobbyWidget::HandleMatchCodeReady);
-    Sub->OnSessionFailed.AddDynamic(this,   &UNexusLobbyWidget::HandleSessionFailed);
+    // ── Initial state ─────────────────────────────────────────────────────
 
-    // ── Bind GameState delegates ──────────────────────────────────────────
-    // GameState may not be ready yet on clients — retry via a short timer
+    SetStatus(TEXT("Waiting for players..."));
 
-    BindGameStateDelegates();
+    // GameState may not be replicated yet — TryBindGameState retries on tick
+    TryBindGameState();
 
-    // ── Role-specific setup ───────────────────────────────────────────────
-
-    SetupForRole();
-
-    // Show any already-stored match code (host travels before code is ready)
-    const FString ExistingCode = Sub->GetActiveMatchCode();
-    if (!ExistingCode.IsEmpty())
-    {
-        NEXUS_LOG("[LobbyWidget] Match code already available: '%s'", *ExistingCode);
-        HandleMatchCodeReady(ExistingCode);
-    }
-
-    NEXUS_SUCCESS("[LobbyWidget] Init complete. IsHost=%s",
-        Sub->IsHost() ? TEXT("YES") : TEXT("NO"));
+    NEXUS_SUCCESS("[LobbyWidget] Init complete");
 }
 
 void UNexusLobbyWidget::NativeDestruct()
 {
-    if (UNexusMultiplayerSubsystem* Sub = GetSubsystem())
+    if (APlayerController* PC = GetOwningPlayer())
     {
-        Sub->OnMatchCodeReady.RemoveDynamic(this, &UNexusLobbyWidget::HandleMatchCodeReady);
-        Sub->OnSessionFailed.RemoveDynamic(this,  &UNexusLobbyWidget::HandleSessionFailed);
+        PC->SetInputMode(FInputModeGameOnly());
+        PC->SetShowMouseCursor(false);
     }
 
-    if (UWorld* World = GetWorld())
+    // Unbind subsystem delegates
+    if (UNexusMultiplayerSubsystem* Sub = GetSubsystem())
     {
-        if (ANexusLobbyGameState* GS =
-            World->GetGameState<ANexusLobbyGameState>())
-        {
-            GS->OnPlayerListUpdated.RemoveDynamic(
-                this, &UNexusLobbyWidget::HandlePlayerListUpdated);
-            GS->OnMatchCodeReady.RemoveDynamic(
-                this, &UNexusLobbyWidget::HandleMatchCodeReady);
-        }
+        Sub->OnSessionFailed.RemoveDynamic(
+            this, &UNexusLobbyWidget::HandleSessionFailed);
+    }
+
+    // Unbind GameState delegates
+    if (ANexusLobbyGameState* GS = GetNexusGameState())
+    {
+        GS->OnMatchCodeReady.RemoveDynamic(
+            this, &UNexusLobbyWidget::HandleMatchCodeReady);
+        GS->OnPlayerListUpdated.RemoveDynamic(
+            this, &UNexusLobbyWidget::HandlePlayerListUpdated);
     }
 
     NEXUS_LOG("[LobbyWidget] NativeDestruct — delegates unbound");
     Super::NativeDestruct();
 }
 
-// ── Role Setup ────────────────────────────────────────────────────────────────
+void UNexusLobbyWidget::NativeTick(
+    const FGeometry& MyGeometry, float InDeltaTime)
+{
+    Super::NativeTick(MyGeometry, InDeltaTime);
+
+    // Retry binding GameState every tick until it's replicated
+    if (!bGameStateBound)
+        TryBindGameState();
+}
+
+// ── Setup ─────────────────────────────────────────────────────────────────────
+
+void UNexusLobbyWidget::TryBindGameState()
+{
+    ANexusLobbyGameState* GS = GetNexusGameState();
+    if (!GS) return;
+
+    NEXUS_LOG("[LobbyWidget] GameState found — binding delegates");
+
+    GS->OnMatchCodeReady.AddDynamic(
+        this, &UNexusLobbyWidget::HandleMatchCodeReady);
+    GS->OnPlayerListUpdated.AddDynamic(
+        this, &UNexusLobbyWidget::HandlePlayerListUpdated);
+
+    bGameStateBound = true;
+
+    // Race condition fix — data may already exist before we bound
+    const FString ExistingCode = GS->GetMatchCode();
+    if (!ExistingCode.IsEmpty())
+        HandleMatchCodeReady(ExistingCode);
+
+    const TArray<FNexusPlayerInfo>& Players = GS->GetPlayerList();
+    if (Players.Num() > 0)
+        HandlePlayerListUpdated(Players);
+
+    SetupForRole();
+}
 
 void UNexusLobbyWidget::SetupForRole()
 {
-    UNexusMultiplayerSubsystem* Sub = GetSubsystem();
-    if (!Sub) return;
+    const bool bIsHost = GetOwningPlayer() &&
+        GetWorld()->GetNetMode() == NM_ListenServer;
 
-    const bool bIsHost = Sub->IsHost();
+    NEXUS_LOG("[LobbyWidget] SetupForRole — IsHost: %s",
+        bIsHost ? TEXT("YES") : TEXT("NO"));
 
-    // Show match code panel only for host
+    // Match code panel only visible to host
     if (MatchCodePanel)
         MatchCodePanel->SetVisibility(
-            bIsHost ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+            bIsHost ? ESlateVisibility::Visible
+                    : ESlateVisibility::Collapsed);
 
-    // Only host can start the game
+    // Start button only visible to host
     if (StartButton)
-    {
         StartButton->SetVisibility(
-            bIsHost ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
-        StartButton->SetIsEnabled(bIsHost);
-    }
+            bIsHost ? ESlateVisibility::Visible
+                    : ESlateVisibility::Collapsed);
 
-    SetStatus(bIsHost
-        ? TEXT("Waiting for players...")
-        : TEXT("Waiting for host to start..."));
+    // Session type display
+    if (SessionTypeText)
+    {
+        if (UNexusMultiplayerSubsystem* Sub = GetSubsystem())
+        {
+            const bool bPrivate = Sub->IsSessionPrivate();
+            SessionTypeText->SetText(
+                FText::FromString(bPrivate ? TEXT("Private") : TEXT("Public")));
+        }
+    }
 }
 
 // ── Button Handlers ───────────────────────────────────────────────────────────
-
-void UNexusLobbyWidget::HandleStartClicked()
-{
-    UNexusMultiplayerSubsystem* Sub = GetSubsystem();
-    if (!Sub || !Sub->IsHost())
-    {
-        NEXUS_WARN("[LobbyWidget] Start clicked but not host — ignoring");
-        return;
-    }
-
-    NEXUS_LOG("[LobbyWidget] Start clicked — host traveling to game map: '%s'",
-        *GameMapPath);
-
-    SetStatus(TEXT("Starting game..."), FLinearColor::Green);
-
-    if (StartButton)
-        StartButton->SetIsEnabled(false);
-
-    // ServerTravel broadcasts to all connected clients automatically
-    UWorld* World = GetWorld();
-    if (!World)
-    {
-        NEXUS_ERROR("[LobbyWidget] Start: World is null");
-        return;
-    }
-
-    World->ServerTravel(GameMapPath);
-}
 
 void UNexusLobbyWidget::HandleLeaveClicked()
 {
@@ -157,19 +177,58 @@ void UNexusLobbyWidget::HandleLeaveClicked()
     if (!Sub) return;
 
     NEXUS_LOG("[LobbyWidget] Leave clicked");
-    SetStatus(TEXT("Leaving..."), FLinearColor::Yellow);
+    SetStatus(TEXT("Leaving session..."), FLinearColor::Yellow);
+
+    if (LeaveButton) LeaveButton->SetIsEnabled(false);
+    if (StartButton) StartButton->SetIsEnabled(false);
 
     Sub->LeaveSession();
 }
 
-// ── Delegate Handlers ─────────────────────────────────────────────────────────
+void UNexusLobbyWidget::HandleStartClicked()
+{
+    // Only the host should ever see or click this
+    if (GetWorld()->GetNetMode() != NM_ListenServer)
+    {
+        NEXUS_WARN("[LobbyWidget] Start clicked by non-host — ignoring");
+        return;
+    }
+
+    UNexusMultiplayerSubsystem* Sub = GetSubsystem();
+    if (!Sub) return;
+
+    const FString GameMap = Sub->GetLastSessionConfig().GameMapPath;
+
+    if (GameMap.IsEmpty())
+    {
+        NEXUS_ERROR("[LobbyWidget] GameMapPath is empty — set it in FNexusSessionConfig");
+        SetStatus(TEXT("Error: no game map configured"), FLinearColor::Red);
+        return;
+    }
+
+    NEXUS_SUCCESS("[LobbyWidget] Host starting game — traveling to: %s", *GameMap);
+    SetStatus(TEXT("Starting game..."), FLinearColor::Green);
+
+    if (StartButton) StartButton->SetIsEnabled(false);
+
+    GetWorld()->ServerTravel(GameMap);
+}
+
+// ── GameState Delegate Handlers ───────────────────────────────────────────────
 
 void UNexusLobbyWidget::HandleMatchCodeReady(const FString& Code)
 {
     NEXUS_SUCCESS("[LobbyWidget] Match code: '%s'", *Code);
 
     if (MatchCodeText)
-        MatchCodeText->SetText(FText::FromString(Code));
+    {
+        MatchCodeText->SetText(
+            FText::FromString(FString::Printf(TEXT("Code: %s"), *Code)));
+        MatchCodeText->SetVisibility(ESlateVisibility::Visible);
+    }
+
+    if (MatchCodePanel)
+        MatchCodePanel->SetVisibility(ESlateVisibility::Visible);
 }
 
 void UNexusLobbyWidget::HandlePlayerListUpdated(
@@ -177,87 +236,58 @@ void UNexusLobbyWidget::HandlePlayerListUpdated(
 {
     NEXUS_LOG("[LobbyWidget] Player list updated: %d players", Players.Num());
     RefreshPlayerList(Players);
+
+    if (UNexusMultiplayerSubsystem* Sub = GetSubsystem())
+        UpdatePlayerCount(Players.Num(),
+            Sub->GetLastSessionConfig().MaxPlayers);
 }
+
+// ── Subsystem Delegate Handlers ───────────────────────────────────────────────
 
 void UNexusLobbyWidget::HandleSessionFailed(const FString& Error)
 {
     NEXUS_ERROR("[LobbyWidget] Session error: %s", *Error);
-    SetStatus(Error, FLinearColor::Red);
+    SetStatus(FString::Printf(TEXT("Error: %s"), *Error), FLinearColor::Red);
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-void UNexusLobbyWidget::BindGameStateDelegates()
-{
-    UWorld* World = GetWorld();
-    if (!World) return;
-
-    ANexusLobbyGameState* GS =
-        World->GetGameState<ANexusLobbyGameState>();
-
-    if (!GS)
-    {
-        // GameState not replicated yet on clients — retry next frame
-        NEXUS_WARN("[LobbyWidget] GameState not available yet — will retry binding");
-
-        FTimerHandle Handle;
-        World->GetTimerManager().SetTimer(Handle, [this]()
-        {
-            BindGameStateDelegates();
-        }, 0.2f, false);
-        return;
-    }
-
-    GS->OnPlayerListUpdated.AddDynamic(
-        this, &UNexusLobbyWidget::HandlePlayerListUpdated);
-    GS->OnMatchCodeReady.AddDynamic(
-        this, &UNexusLobbyWidget::HandleMatchCodeReady);
-
-    NEXUS_LOG("[LobbyWidget] Bound to ANexusLobbyGameState delegates");
-
-    // Populate immediately with whatever is already replicated
-    const TArray<FNexusPlayerInfo>& Players = GS->GetPlayerList();
-    if (Players.Num() > 0)
-        RefreshPlayerList(Players);
-
-    const FString& ExistingCode = GS->GetMatchCode();
-    if (!ExistingCode.IsEmpty())
-        HandleMatchCodeReady(ExistingCode);
-}
-
-void UNexusLobbyWidget::RefreshPlayerList(const TArray<FNexusPlayerInfo>& Players)
+void UNexusLobbyWidget::RefreshPlayerList(
+    const TArray<FNexusPlayerInfo>& Players)
 {
     if (!PlayerListBox) return;
 
     PlayerListBox->ClearChildren();
 
+    const bool bIsHost = GetWorld()->GetNetMode() == NM_ListenServer;
+    const FString LocalId = GetSubsystem()
+        ? GetSubsystem()->GetLocalUserId() : FString();
+
     for (const FNexusPlayerInfo& Player : Players)
     {
-        // Simple text row — replace with a proper PlayerRowWidget if desired
-        UTextBlock* NameText = NewObject<UTextBlock>(this);
-
+        // Build display string: "[Host] PlayerName (You)"
         FString Label = Player.DisplayName;
-        if (Player.bIsHost)    Label += TEXT(" [Host]");
-        if (Player.bIsLocalPlayer) Label += TEXT(" (You)");
 
-        NameText->SetText(FText::FromString(Label));
-        PlayerListBox->AddChild(NameText);
+        if (Player.bIsHost)
+            Label = FString::Printf(TEXT("[Host] %s"), *Label);
+
+        const bool bIsLocal = !LocalId.IsEmpty()
+            ? Player.UserId == LocalId
+            : Player.bIsLocalPlayer;
+
+        if (bIsLocal)
+            Label = FString::Printf(TEXT("%s (You)"), *Label);
+
+        if (Player.PingMs > 0 && !bIsHost)
+            Label = FString::Printf(TEXT("%s  %dms"), *Label, Player.PingMs);
+
+        UTextBlock* Row = NewObject<UTextBlock>(this);
+        Row->SetText(FText::FromString(Label));
+        Row->SetColorAndOpacity(FSlateColor(
+            bIsLocal ? FLinearColor::Yellow : FLinearColor::White));
+
+        PlayerListBox->AddChild(Row);
     }
-
-    if (PlayerCountText)
-    {
-        // Get max from subsystem's last session config if available
-        const FString CountStr = FString::Printf(TEXT("%d players"), Players.Num());
-        PlayerCountText->SetText(FText::FromString(CountStr));
-    }
-
-    NEXUS_LOG("[LobbyWidget] Refreshed player list: %d entries", Players.Num());
-}
-
-UNexusMultiplayerSubsystem* UNexusLobbyWidget::GetSubsystem() const
-{
-    if (Subsystem.IsValid()) return Subsystem.Get();
-    return nullptr;
 }
 
 void UNexusLobbyWidget::SetStatus(const FString& Message, FLinearColor Color)
@@ -267,4 +297,25 @@ void UNexusLobbyWidget::SetStatus(const FString& Message, FLinearColor Color)
         StatusText->SetText(FText::FromString(Message));
         StatusText->SetColorAndOpacity(FSlateColor(Color));
     }
+}
+
+void UNexusLobbyWidget::UpdatePlayerCount(int32 Current, int32 Max)
+{
+    if (PlayerCountText)
+    {
+        PlayerCountText->SetText(FText::FromString(
+            FString::Printf(TEXT("%d / %d players"), Current, Max)));
+    }
+}
+
+UNexusMultiplayerSubsystem* UNexusLobbyWidget::GetSubsystem() const
+{
+    if (Subsystem.IsValid()) return Subsystem.Get();
+    return nullptr;
+}
+
+ANexusLobbyGameState* UNexusLobbyWidget::GetNexusGameState() const
+{
+    if (!GetWorld()) return nullptr;
+    return GetWorld()->GetGameState<ANexusLobbyGameState>();
 }

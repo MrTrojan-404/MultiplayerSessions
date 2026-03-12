@@ -10,7 +10,7 @@
 #include "Components/TextBlock.h"
 #include "Components/WidgetSwitcher.h"
 #include "Components/CheckBox.h"
-#include "Kismet/GameplayStatics.h"
+#include "Components/ComboBoxString.h"
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 
@@ -20,12 +20,23 @@ void UNexusMenuWidget::NativeConstruct()
 
     NEXUS_LOG("[MenuWidget] NativeConstruct");
 
-    // ── Get subsystem ──────────────────────────────────────────────────────
+    // ── Input mode ────────────────────────────────────────────────────────
+
+    if (APlayerController* PC = GetOwningPlayer())
+    {
+        FInputModeUIOnly InputMode;
+        InputMode.SetWidgetToFocus(TakeWidget());
+        InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+        PC->SetInputMode(InputMode);
+        PC->SetShowMouseCursor(true);
+    }
+
+    // ── Subsystem ─────────────────────────────────────────────────────────
 
     UGameInstance* GI = GetGameInstance();
     if (!GI)
     {
-        NEXUS_ERROR("[MenuWidget] GameInstance is null — subsystem unavailable");
+        NEXUS_ERROR("[MenuWidget] GameInstance is null");
         return;
     }
 
@@ -33,7 +44,7 @@ void UNexusMenuWidget::NativeConstruct()
         GI->GetSubsystem<UNexusMultiplayerSubsystem>();
     if (!Sub)
     {
-        NEXUS_ERROR("[MenuWidget] NexusMultiplayerSubsystem not found on GameInstance");
+        NEXUS_ERROR("[MenuWidget] NexusMultiplayerSubsystem not found");
         return;
     }
 
@@ -42,53 +53,104 @@ void UNexusMenuWidget::NativeConstruct()
     // ── Bind buttons ──────────────────────────────────────────────────────
 
     if (HostButton)
-        HostButton->OnClicked.AddDynamic(this, &UNexusMenuWidget::HandleHostClicked);
+        HostButton->OnClicked.AddDynamic(
+            this, &UNexusMenuWidget::HandleHostClicked);
 
     if (FindButton)
-        FindButton->OnClicked.AddDynamic(this, &UNexusMenuWidget::HandleFindClicked);
+        FindButton->OnClicked.AddDynamic(
+            this, &UNexusMenuWidget::HandleFindClicked);
 
     if (JoinByCodeButton)
-        JoinByCodeButton->OnClicked.AddDynamic(this, &UNexusMenuWidget::HandleJoinByCodeClicked);
+        JoinByCodeButton->OnClicked.AddDynamic(
+            this, &UNexusMenuWidget::HandleJoinByCodeClicked);
 
     if (RefreshButton)
-        RefreshButton->OnClicked.AddDynamic(this, &UNexusMenuWidget::HandleRefreshClicked);
+        RefreshButton->OnClicked.AddDynamic(
+            this, &UNexusMenuWidget::HandleRefreshClicked);
+
+    if (ConfirmHostButton)
+        ConfirmHostButton->OnClicked.AddDynamic(
+            this, &UNexusMenuWidget::HandleConfirmHostClicked);
+    
+    if (BrowserBackButton)
+        BrowserBackButton->OnClicked.AddDynamic(
+            this, &UNexusMenuWidget::HandleBackClicked);
+
+    if (HostingBackButton)
+        HostingBackButton->OnClicked.AddDynamic(
+            this, &UNexusMenuWidget::HandleBackClicked);
 
     // ── Bind subsystem delegates ──────────────────────────────────────────
 
-    Sub->OnSessionCreated.AddDynamic(this,  &UNexusMenuWidget::HandleSessionCreated);
-    Sub->OnSessionJoined.AddDynamic(this,   &UNexusMenuWidget::HandleSessionJoined);
-    Sub->OnSessionFailed.AddDynamic(this,   &UNexusMenuWidget::HandleSessionFailed);
-    Sub->OnSessionListReady.AddDynamic(this,&UNexusMenuWidget::HandleSessionListReady);
-    Sub->OnMatchCodeReady.AddDynamic(this,  &UNexusMenuWidget::HandleMatchCodeReady);
-    Sub->OnDisplayNameReady.AddDynamic(this,&UNexusMenuWidget::HandleDisplayNameReady);
+    Sub->OnSessionCreated.AddDynamic(
+        this, &UNexusMenuWidget::HandleSessionCreated);
+    Sub->OnSessionJoined.AddDynamic(
+        this, &UNexusMenuWidget::HandleSessionJoined);
+    Sub->OnSessionFailed.AddDynamic(
+        this, &UNexusMenuWidget::HandleSessionFailed);
+    Sub->OnSessionListReady.AddDynamic(
+        this, &UNexusMenuWidget::HandleSessionListReady);
+    Sub->OnDisplayNameReady.AddDynamic(
+        this, &UNexusMenuWidget::HandleDisplayNameReady);
 
+    // Populate match type options
+    if (MatchTypeCombo)
+    {
+        MatchTypeCombo->ClearOptions();
+        MatchTypeCombo->AddOption(TEXT("FreeForAll"));
+       // MatchTypeCombo->AddOption(TEXT("TeamDeathmatch"));
+        MatchTypeCombo->SetSelectedOption(DefaultSessionConfig.MatchType);
+    }
+
+    // Populate map options
+    if (MapCombo)
+    {
+        MapCombo->ClearOptions();
+        for (const FNexusMapEntry& Map : AvailableMaps)
+            MapCombo->AddOption(Map.DisplayName);
+
+        if (MapCombo->GetOptionCount() > 0)
+            MapCombo->SetSelectedIndex(0);
+
+        MapCombo->OnSelectionChanged.AddDynamic(
+            this, &UNexusMenuWidget::HandleMapSelectionChanged);
+
+        if (AvailableMaps.Num() > 0)
+            SelectedMap = AvailableMaps[0];
+    }
+    
     // ── Initial state ─────────────────────────────────────────────────────
 
-    SetStatus(TEXT("Ready"));
-    ShowPanel(0);
+    ShowMain();
 
-    // Display name may already be resolved if subsystem init finished before widget
+    // Display name may already be available if subsystem init beat widget init
     const FString Name = Sub->GetLocalDisplayName();
     if (!Name.IsEmpty() && DisplayNameText)
-    {
         DisplayNameText->SetText(FText::FromString(Name));
-        NEXUS_LOG("[MenuWidget] Display name already resolved: '%s'", *Name);
-    }
 
     NEXUS_SUCCESS("[MenuWidget] Init complete");
 }
 
 void UNexusMenuWidget::NativeDestruct()
 {
-    // Unbind to avoid callbacks firing on a destroyed widget
+    if (APlayerController* PC = GetOwningPlayer())
+    {
+        PC->SetInputMode(FInputModeGameOnly());
+        PC->SetShowMouseCursor(false);
+    }
+
     if (UNexusMultiplayerSubsystem* Sub = GetSubsystem())
     {
-        Sub->OnSessionCreated.RemoveDynamic(this,  &UNexusMenuWidget::HandleSessionCreated);
-        Sub->OnSessionJoined.RemoveDynamic(this,   &UNexusMenuWidget::HandleSessionJoined);
-        Sub->OnSessionFailed.RemoveDynamic(this,   &UNexusMenuWidget::HandleSessionFailed);
-        Sub->OnSessionListReady.RemoveDynamic(this,&UNexusMenuWidget::HandleSessionListReady);
-        Sub->OnMatchCodeReady.RemoveDynamic(this,  &UNexusMenuWidget::HandleMatchCodeReady);
-        Sub->OnDisplayNameReady.RemoveDynamic(this,&UNexusMenuWidget::HandleDisplayNameReady);
+        Sub->OnSessionCreated.RemoveDynamic(
+            this, &UNexusMenuWidget::HandleSessionCreated);
+        Sub->OnSessionJoined.RemoveDynamic(
+            this, &UNexusMenuWidget::HandleSessionJoined);
+        Sub->OnSessionFailed.RemoveDynamic(
+            this, &UNexusMenuWidget::HandleSessionFailed);
+        Sub->OnSessionListReady.RemoveDynamic(
+            this, &UNexusMenuWidget::HandleSessionListReady);
+        Sub->OnDisplayNameReady.RemoveDynamic(
+            this, &UNexusMenuWidget::HandleDisplayNameReady);
     }
 
     NEXUS_LOG("[MenuWidget] NativeDestruct — delegates unbound");
@@ -99,20 +161,25 @@ void UNexusMenuWidget::NativeDestruct()
 
 void UNexusMenuWidget::HandleHostClicked()
 {
+    // Go to hosting config panel first — user fills in settings then confirms
+    NEXUS_LOG("[MenuWidget] Host clicked — showing hosting config");
+    ShowHosting();
+}
+
+void UNexusMenuWidget::HandleConfirmHostClicked()
+{
     UNexusMultiplayerSubsystem* Sub = GetSubsystem();
     if (!Sub) return;
 
     FNexusSessionConfig Config = BuildSessionConfig();
 
-    NEXUS_LOG("[MenuWidget] Host clicked. Players=%d | Map='%s' | Private=%s | Type='%s'",
+    NEXUS_LOG("[MenuWidget] ConfirmHost: Players=%d | Map='%s' | Private=%s | Type='%s'",
         Config.MaxPlayers,
         *Config.LobbyMapPath,
         Config.bPrivate ? TEXT("YES") : TEXT("NO"),
         *Config.MatchType);
 
-    SetStatus(TEXT("Creating session..."), FLinearColor::Yellow);
-    SetLoadingState(true);
-
+    ShowLoading(TEXT("Creating session..."));
     Sub->HostSession(Config);
 }
 
@@ -121,13 +188,10 @@ void UNexusMenuWidget::HandleFindClicked()
     UNexusMultiplayerSubsystem* Sub = GetSubsystem();
     if (!Sub) return;
 
-    NEXUS_LOG("[MenuWidget] Find clicked — searching for sessions");
+    NEXUS_LOG("[MenuWidget] Find clicked");
 
-    SetStatus(TEXT("Searching..."), FLinearColor::Yellow);
-    SetLoadingState(true);
     ClearServerList();
-    ShowPanel(1);
-
+    ShowLoading(TEXT("Searching for sessions..."));
     Sub->FindSessions(100);
 }
 
@@ -138,32 +202,28 @@ void UNexusMenuWidget::HandleJoinByCodeClicked()
 
     if (!CodeInputBox)
     {
-        NEXUS_ERROR("[MenuWidget] JoinByCode: CodeInputBox is null — check UMG bindings");
+        NEXUS_ERROR("[MenuWidget] CodeInputBox is null");
         return;
     }
 
-    const FString Code = CodeInputBox->GetText().ToString().TrimStartAndEnd().ToUpper();
+    const FString Code = CodeInputBox->GetText()
+        .ToString().TrimStartAndEnd().ToUpper();
 
     if (Code.IsEmpty())
     {
-        NEXUS_WARN("[MenuWidget] JoinByCode: code input is empty");
         SetStatus(TEXT("Enter a match code first"), FLinearColor::Yellow);
         return;
     }
 
     if (Code.Len() != 6)
     {
-        NEXUS_WARN("[MenuWidget] JoinByCode: code '%s' is not 6 characters", *Code);
         SetStatus(TEXT("Match code must be 6 characters"), FLinearColor::Yellow);
         return;
     }
 
-    NEXUS_LOG("[MenuWidget] JoinByCode clicked. Code='%s'", *Code);
+    NEXUS_LOG("[MenuWidget] JoinByCode: '%s'", *Code);
 
-    SetStatus(FString::Printf(TEXT("Looking up code '%s'..."), *Code),
-        FLinearColor::Yellow);
-    SetLoadingState(true);
-
+    ShowLoading(FString::Printf(TEXT("Looking up code '%s'..."), *Code));
     Sub->JoinByCode(Code);
 }
 
@@ -173,77 +233,72 @@ void UNexusMenuWidget::HandleRefreshClicked()
     HandleFindClicked();
 }
 
+void UNexusMenuWidget::HandleBackClicked()
+{
+    NEXUS_LOG("[MenuWidget] Back clicked — returning to Main");
+    ShowMain();
+}
+
 // ── Subsystem Delegate Handlers ───────────────────────────────────────────────
 
 void UNexusMenuWidget::HandleSessionCreated(bool bWasSuccessful)
 {
-    SetLoadingState(false);
-
     if (!bWasSuccessful)
     {
         NEXUS_ERROR("[MenuWidget] Session creation failed");
-        SetStatus(TEXT("Failed to create session"), FLinearColor::Red);
+        ShowMain();
+        SetStatus(TEXT("Failed to create session. Try again."), FLinearColor::Red);
         return;
     }
 
+    // Stay on loading — ServerTravel is already in progress,
+    // widget will be destroyed when the lobby map loads
     NEXUS_SUCCESS("[MenuWidget] Session created — traveling to lobby");
-    SetStatus(TEXT("Session created — loading lobby..."), FLinearColor::Green);
-    ShowPanel(2); // Hosting panel
+    SetStatus(TEXT("Loading lobby..."), FLinearColor::Green);
 }
 
 void UNexusMenuWidget::HandleSessionJoined(bool bWasSuccessful)
 {
-    SetLoadingState(false);
-
     if (!bWasSuccessful)
     {
         NEXUS_ERROR("[MenuWidget] Join failed");
-        SetStatus(TEXT("Failed to join session"), FLinearColor::Red);
+        ShowMain();
+        SetStatus(TEXT("Failed to join session. Try again."), FLinearColor::Red);
         return;
     }
 
-    NEXUS_SUCCESS("[MenuWidget] Joined session — traveling to lobby");
-    SetStatus(TEXT("Joined — loading lobby..."), FLinearColor::Green);
+    // Success — subsystem handles ClientTravel, widget will be destroyed shortly
+    NEXUS_SUCCESS("[MenuWidget] Joined session — traveling");
+    SetStatus(TEXT("Joined — loading..."), FLinearColor::Green);
 }
 
 void UNexusMenuWidget::HandleSessionFailed(const FString& Error)
 {
-    SetLoadingState(false);
-
     NEXUS_ERROR("[MenuWidget] Session error: %s", *Error);
-    SetStatus(Error, FLinearColor::Red);
+    ShowMain();
+    SetStatus(FString::Printf(TEXT("Error: %s"), *Error), FLinearColor::Red);
 }
 
 void UNexusMenuWidget::HandleSessionListReady(const TArray<FNexusServerRow>& Rows)
 {
-    SetLoadingState(false);
-
     if (Rows.Num() == 0)
     {
         NEXUS_WARN("[MenuWidget] No sessions found");
+        ShowMain();
         SetStatus(TEXT("No sessions found — try refreshing"), FLinearColor::Yellow);
         return;
     }
 
-    NEXUS_SUCCESS("[MenuWidget] Session list ready: %d sessions", Rows.Num());
+    NEXUS_SUCCESS("[MenuWidget] %d session(s) found", Rows.Num());
+    PopulateServerList(Rows);
+    ShowBrowser();
     SetStatus(FString::Printf(TEXT("%d session(s) found"), Rows.Num()),
         FLinearColor::Green);
-
-    PopulateServerList(Rows);
-}
-
-void UNexusMenuWidget::HandleMatchCodeReady(const FString& Code)
-{
-    NEXUS_SUCCESS("[MenuWidget] Match code ready: '%s'", *Code);
-
-    if (MatchCodeDisplay)
-        MatchCodeDisplay->SetText(FText::FromString(Code));
 }
 
 void UNexusMenuWidget::HandleDisplayNameReady(const FString& Name)
 {
-    NEXUS_SUCCESS("[MenuWidget] Display name ready: '%s'", *Name);
-
+    NEXUS_SUCCESS("[MenuWidget] Display name: '%s'", *Name);
     if (DisplayNameText)
         DisplayNameText->SetText(FText::FromString(Name));
 }
@@ -259,22 +314,48 @@ void UNexusMenuWidget::HandleServerRowClicked(const TArray<FNexusServerRow>& Row
 
     const FNexusServerRow& Row = Rows[0];
 
-    NEXUS_LOG("[MenuWidget] Server row clicked: Host='%s' SessionId='%s'",
-        *Row.HostName, *Row.SessionId);
+    NEXUS_LOG("[MenuWidget] Row clicked: Host='%s'", *Row.HostName);
 
-    SetStatus(FString::Printf(TEXT("Joining %s's session..."), *Row.HostName),
-        FLinearColor::Yellow);
-    SetLoadingState(true);
+    ShowLoading(FString::Printf(
+        TEXT("Joining %s's session..."), *Row.HostName));
 
     Sub->JoinSessionFromRow(Row);
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// ── Panel Helpers ─────────────────────────────────────────────────────────────
+
+void UNexusMenuWidget::ShowMain()
+{
+    if (MenuSwitcher) MenuSwitcher->SetActiveWidgetIndex(0);
+    SetButtonsEnabled(true);
+    SetStatus(TEXT("Ready"));
+}
+
+void UNexusMenuWidget::ShowBrowser()
+{
+    if (MenuSwitcher) MenuSwitcher->SetActiveWidgetIndex(1);
+    SetButtonsEnabled(true);
+}
+
+void UNexusMenuWidget::ShowHosting()
+{
+    if (MenuSwitcher) MenuSwitcher->SetActiveWidgetIndex(2);
+    SetButtonsEnabled(true);
+}
+
+void UNexusMenuWidget::ShowLoading(const FString& Message)
+{
+    if (MenuSwitcher) MenuSwitcher->SetActiveWidgetIndex(3);
+    SetButtonsEnabled(false);
+    SetStatus(Message, FLinearColor::Yellow);
+}
+
+// ── Other Helpers ─────────────────────────────────────────────────────────────
 
 UNexusMultiplayerSubsystem* UNexusMenuWidget::GetSubsystem() const
 {
     if (Subsystem.IsValid()) return Subsystem.Get();
-    NEXUS_ERROR("[MenuWidget] GetSubsystem: subsystem ref is stale");
+    NEXUS_ERROR("[MenuWidget] Subsystem ref is stale");
     return nullptr;
 }
 
@@ -287,18 +368,13 @@ void UNexusMenuWidget::SetStatus(const FString& Message, FLinearColor Color)
     }
 }
 
-void UNexusMenuWidget::SetLoadingState(bool bLoading)
+void UNexusMenuWidget::SetButtonsEnabled(bool bEnabled)
 {
-    // Disable interactive elements while an async op is in-flight
-    const bool bEnabled = !bLoading;
-
-    if (HostButton)       HostButton->SetIsEnabled(bEnabled);
-    if (FindButton)       FindButton->SetIsEnabled(bEnabled);
-    if (JoinByCodeButton) JoinByCodeButton->SetIsEnabled(bEnabled);
-    if (RefreshButton)    RefreshButton->SetIsEnabled(bEnabled);
-
-    if (bLoading)
-        ShowPanel(3); // Loading panel
+    if (HostButton)         HostButton->SetIsEnabled(bEnabled);
+    if (FindButton)         FindButton->SetIsEnabled(bEnabled);
+    if (JoinByCodeButton)   JoinByCodeButton->SetIsEnabled(bEnabled);
+    if (RefreshButton)      RefreshButton->SetIsEnabled(bEnabled);
+    if (ConfirmHostButton)  ConfirmHostButton->SetIsEnabled(bEnabled);
 }
 
 void UNexusMenuWidget::ClearServerList()
@@ -313,14 +389,12 @@ void UNexusMenuWidget::PopulateServerList(const TArray<FNexusServerRow>& Rows)
 
     if (!ServerListScrollBox)
     {
-        NEXUS_ERROR("[MenuWidget] PopulateServerList: ServerListScrollBox is null");
+        NEXUS_ERROR("[MenuWidget] ServerListScrollBox is null");
         return;
     }
-
     if (!ServerRowWidgetClass)
     {
-        NEXUS_ERROR("[MenuWidget] PopulateServerList: ServerRowWidgetClass not set — "
-                    "assign your row widget Blueprint in the menu widget defaults");
+        NEXUS_ERROR("[MenuWidget] ServerRowWidgetClass not set in Blueprint defaults");
         return;
     }
 
@@ -331,8 +405,7 @@ void UNexusMenuWidget::PopulateServerList(const TArray<FNexusServerRow>& Rows)
 
         if (!RowWidget)
         {
-            NEXUS_ERROR("[MenuWidget] Failed to create row widget for session '%s'",
-                *Row.SessionId);
+            NEXUS_ERROR("[MenuWidget] Failed to create row widget");
             continue;
         }
 
@@ -343,14 +416,12 @@ void UNexusMenuWidget::PopulateServerList(const TArray<FNexusServerRow>& Rows)
         ServerListScrollBox->AddChild(RowWidget);
     }
 
-    NEXUS_LOG("[MenuWidget] Populated server list with %d rows", Rows.Num());
+    NEXUS_LOG("[MenuWidget] Populated %d server rows", Rows.Num());
 }
-
 FNexusSessionConfig UNexusMenuWidget::BuildSessionConfig() const
 {
     FNexusSessionConfig Config = DefaultSessionConfig;
 
-    // Override with input box values if they're filled in
     if (MaxPlayersBox)
     {
         const FString Val = MaxPlayersBox->GetText().ToString().TrimStartAndEnd();
@@ -358,25 +429,18 @@ FNexusSessionConfig UNexusMenuWidget::BuildSessionConfig() const
         {
             const int32 Parsed = FCString::Atoi(*Val);
             if (Parsed > 0)
-            {
                 Config.MaxPlayers = FMath::Clamp(Parsed, 2, 64);
-                NEXUS_LOG("[MenuWidget] MaxPlayers from input: %d", Config.MaxPlayers);
-            }
         }
     }
 
-    if (MatchTypeBox)
-    {
-        const FString Val = MatchTypeBox->GetText().ToString().TrimStartAndEnd();
-        if (!Val.IsEmpty())
-            Config.MatchType = Val;
-    }
+    if (MatchTypeCombo && MatchTypeCombo->GetOptionCount() > 0)
+        Config.MatchType = MatchTypeCombo->GetSelectedOption();
 
-    if (LobbyMapBox)
+    // LobbyMapPath comes from the selected map entry
+    if (!SelectedMap.LobbyMapPath.IsEmpty())
     {
-        const FString Val = LobbyMapBox->GetText().ToString().TrimStartAndEnd();
-        if (!Val.IsEmpty())
-            Config.LobbyMapPath = Val;
+        Config.LobbyMapPath = SelectedMap.LobbyMapPath;
+        Config.GameMapPath  = SelectedMap.GameMapPath;
     }
 
     if (PrivateCheckBox)
@@ -385,8 +449,17 @@ FNexusSessionConfig UNexusMenuWidget::BuildSessionConfig() const
     return Config;
 }
 
-void UNexusMenuWidget::ShowPanel(int32 Index)
+void UNexusMenuWidget::HandleMapSelectionChanged(
+    FString SelectedItem, ESelectInfo::Type SelectionType)
 {
-    if (MenuSwitcher)
-        MenuSwitcher->SetActiveWidgetIndex(Index);
+    for (const FNexusMapEntry& Map : AvailableMaps)
+    {
+        if (Map.DisplayName == SelectedItem)
+        {
+            SelectedMap = Map;
+            NEXUS_LOG("[MenuWidget] Map selected: '%s' | Lobby='%s' | Game='%s'",
+                *Map.DisplayName, *Map.LobbyMapPath, *Map.GameMapPath);
+            return;
+        }
+    }
 }

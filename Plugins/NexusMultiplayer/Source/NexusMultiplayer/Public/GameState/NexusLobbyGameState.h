@@ -64,7 +64,7 @@ public:
     // Fires on all machines (host + clients) when PlayerList replicates
     UPROPERTY(BlueprintAssignable, Category = "Nexus|Events")
     FNexusOnPlayerListUpdated OnPlayerListUpdated;
-
+    
 private:
     // ── Replicated State ──────────────────────────────────────────────────────
 

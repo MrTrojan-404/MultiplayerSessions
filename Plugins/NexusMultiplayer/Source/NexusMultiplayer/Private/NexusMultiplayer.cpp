@@ -4,8 +4,9 @@
 
 #include "Core/NexusLog.h"
 
-#define LOCTEXT_NAMESPACE "FNexusMultiplayerModule"
 DEFINE_LOG_CATEGORY(LogNexus);
+
+#define LOCTEXT_NAMESPACE "FNexusMultiplayerModule"
 
 void FNexusMultiplayerModule::StartupModule()
 {

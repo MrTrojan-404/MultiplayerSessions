@@ -36,6 +36,9 @@ void UNexusServerRowWidget::RefreshDisplay()
 
 	if (MatchTypeText)
 		MatchTypeText->SetText(FText::FromString(RowData.MatchType));
+
+	if (MapNameText)
+		MapNameText->SetText(FText::FromString(RowData.MapName));
 }
 
 void UNexusServerRowWidget::OnRowClicked()

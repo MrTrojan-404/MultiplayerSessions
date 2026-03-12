@@ -55,25 +55,24 @@ struct FNexusSessionConfig
     GENERATED_BODY()
 
     // Max number of players including host
-    UPROPERTY(BlueprintReadWrite, Category = "Nexus|Session")
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Nexus|Session")
     int32 MaxPlayers = 4;
 
     // Full path to the lobby map e.g. "/Game/Maps/Lobby"
     // Plugin appends "?listen" automatically
-    UPROPERTY(BlueprintReadWrite, Category = "Nexus|Session")
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Nexus|Session")
     FString LobbyMapPath = TEXT("/Game/Maps/Lobby");
 
-    // Full path to the gameplay map
-    // Used by your LobbyGameMode to server-travel when the lobby is full
+    // Not EditAnywhere — set at runtime only, not shown in Details panel
     UPROPERTY(BlueprintReadWrite, Category = "Nexus|Session")
-    FString GameMapPath = TEXT("/Game/Maps/GameMap");
+    FString GameMapPath = TEXT("");
 
     // Tag used to filter sessions in the server browser
-    UPROPERTY(BlueprintReadWrite, Category = "Nexus|Session")
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Nexus|Session")
     FString MatchType = TEXT("FreeForAll");
 
     // If true, session is not advertised publicly — join by code only
-    UPROPERTY(BlueprintReadWrite, Category = "Nexus|Session")
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Nexus|Session")
     bool bPrivate = false;
 };
 
@@ -155,6 +154,25 @@ struct FNexusPlayerInfo
     // Ping in ms — updated periodically by the host
     UPROPERTY(BlueprintReadOnly, Category = "Nexus|Player")
     int32 PingMs = 0;
+};
+
+USTRUCT(BlueprintType)
+struct FNexusMapEntry
+{
+    GENERATED_BODY()
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite)
+    FString DisplayName = TEXT("");
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite)
+    FString LobbyMapPath = TEXT("");
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite)
+    FString GameMapPath = TEXT("");
+
+    // Optional: thumbnail shown in map picker
+    UPROPERTY(EditAnywhere, BlueprintReadWrite)
+    TObjectPtr<UTexture2D> Thumbnail = nullptr;
 };
 
 // ─── Delegates ────────────────────────────────────────────────────────────────

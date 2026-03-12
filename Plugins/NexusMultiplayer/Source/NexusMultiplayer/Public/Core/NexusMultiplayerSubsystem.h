@@ -93,6 +93,9 @@ public:
     // Used by ANexusLobbyGameMode to get travel config
     UFUNCTION(BlueprintPure, Category = "Nexus|Session")
     FNexusSessionConfig GetLastSessionConfig() const { return LastSessionConfig; }
+
+    UFUNCTION(BlueprintPure, Category = "Nexus|Identity")
+    FString GetLocalUserId() const;
     
 private:
     // ── Layer instances ───────────────────────────────────────────────────────

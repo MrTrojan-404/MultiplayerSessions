@@ -8,25 +8,24 @@
 
 class UNexusMultiplayerSubsystem;
 class ANexusLobbyGameState;
-class UTextBlock;
-class UScrollBox;
 class UButton;
+class UTextBlock;
 class UVerticalBox;
 
 /**
  * UNexusLobbyWidget
  *
- * Lobby screen shown to all players after traveling to the lobby map.
- * Shows the match code (host only), player list, and a ready/start button.
+ * Shown while players wait in the lobby before the game starts.
+ * Displays the player list, match code (host only), and a Start button (host only).
  *
- * In your UMG Blueprint subclass bind:
- *   MatchCodeText       — shows the 6-char code (only visible to host)
- *   MatchCodePanel      — the whole code display panel (hidden for clients)
- *   PlayerListBox       — VerticalBox populated with player name rows
- *   PlayerCountText     — "2 / 4"
- *   StartButton         — only visible + enabled for host
- *   LeaveButton         — always visible
- *   StatusText          — shows waiting message or errors
+ * Required UMG bindings:
+ *   PlayerListBox, LeaveButton
+ *
+ * Optional UMG bindings:
+ *   MatchCodePanel, MatchCodeText, StartButton,
+ *   PlayerCountText, StatusText, SessionTypeText
+ *
+ * Add to viewport in your Lobby map's Level Blueprint or PlayerController BeginPlay.
  */
 UCLASS(Abstract)
 class NEXUSMULTIPLAYER_API UNexusLobbyWidget : public UUserWidget
@@ -34,73 +33,85 @@ class NEXUSMULTIPLAYER_API UNexusLobbyWidget : public UUserWidget
     GENERATED_BODY()
 
 public:
-    // ── UMG Bindings ─────────────────────────────────────────────────────────
 
-    // Shows the match code — host only
-    UPROPERTY(meta = (BindWidgetOptional))
-    TObjectPtr<UTextBlock> MatchCodeText;
+    // ── Required bindings ─────────────────────────────────────────────────────
 
-    // The whole panel containing the code — hide for clients
-    UPROPERTY(meta = (BindWidgetOptional))
-    TObjectPtr<class UWidget> MatchCodePanel;
-
-    // "2 / 4"
-    UPROPERTY(meta = (BindWidgetOptional))
-    TObjectPtr<UTextBlock> PlayerCountText;
-
-    // Rows of player names
+    // Vertical box — rows added here per player
     UPROPERTY(meta = (BindWidget))
     TObjectPtr<UVerticalBox> PlayerListBox;
-
-    // Only host can click this
-    UPROPERTY(meta = (BindWidgetOptional))
-    TObjectPtr<UButton> StartButton;
 
     UPROPERTY(meta = (BindWidget))
     TObjectPtr<UButton> LeaveButton;
 
+    // ── Optional bindings ─────────────────────────────────────────────────────
+
+    // Whole panel containing the code — hidden for clients
+    UPROPERTY(meta = (BindWidgetOptional))
+    TObjectPtr<UWidget> MatchCodePanel;
+
+    // Shows the match code e.g. "Code: XK39QW"
+    UPROPERTY(meta = (BindWidgetOptional))
+    TObjectPtr<UTextBlock> MatchCodeText;
+
+    // Only visible and functional on the host
+    UPROPERTY(meta = (BindWidgetOptional))
+    TObjectPtr<UButton> StartButton;
+
+    // "2 / 4 players"
+    UPROPERTY(meta = (BindWidgetOptional))
+    TObjectPtr<UTextBlock> PlayerCountText;
+
+    // General status messages
     UPROPERTY(meta = (BindWidgetOptional))
     TObjectPtr<UTextBlock> StatusText;
 
-    // ── Config ────────────────────────────────────────────────────────────────
-
-    // Path the host travels to when clicking Start
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Nexus|Config")
-    FString GameMapPath = TEXT("/Game/Maps/GameMap");
+    // "Public" or "Private"
+    UPROPERTY(meta = (BindWidgetOptional))
+    TObjectPtr<UTextBlock> SessionTypeText;
 
 protected:
+
     virtual void NativeConstruct() override;
-    virtual void NativeDestruct() override;
+    virtual void NativeDestruct()  override;
+    virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
 
 private:
+
+    // ── Refs ──────────────────────────────────────────────────────────────────
+
     TWeakObjectPtr<UNexusMultiplayerSubsystem> Subsystem;
+    TWeakObjectPtr<ANexusLobbyGameState>       GameState;
+
     UNexusMultiplayerSubsystem* GetSubsystem() const;
+    ANexusLobbyGameState*       GetNexusGameState() const;
+
+    // ── Setup ─────────────────────────────────────────────────────────────────
+
+    // Called once GameState is available — retries on tick if not ready yet
+    void TryBindGameState();
+    bool bGameStateBound = false;
+
+    // Configures visibility of host-only elements
+    void SetupForRole();
 
     // ── Button handlers ───────────────────────────────────────────────────────
 
-    UFUNCTION()
-    void HandleStartClicked();
+    UFUNCTION() void HandleLeaveClicked();
+    UFUNCTION() void HandleStartClicked();
 
-    UFUNCTION()
-    void HandleLeaveClicked();
+    // ── GameState delegate handlers ───────────────────────────────────────────
 
-    // ── Subsystem / GameState delegate handlers ───────────────────────────────
+    UFUNCTION() void HandleMatchCodeReady(const FString& Code);
+    UFUNCTION() void HandlePlayerListUpdated(const TArray<FNexusPlayerInfo>& Players);
 
-    UFUNCTION()
-    void HandleMatchCodeReady(const FString& Code);
+    // ── Subsystem delegate handlers ───────────────────────────────────────────
 
-    UFUNCTION()
-    void HandlePlayerListUpdated(const TArray<FNexusPlayerInfo>& Players);
-
-    UFUNCTION()
-    void HandleSessionFailed(const FString& Error);
+    UFUNCTION() void HandleSessionFailed(const FString& Error);
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
-    void BindGameStateDelegates();
     void RefreshPlayerList(const TArray<FNexusPlayerInfo>& Players);
-    void SetStatus(const FString& Message, FLinearColor Color = FLinearColor::White);
-
-    // Called once after NativeConstruct to set initial host/client state
-    void SetupForRole();
+    void SetStatus(const FString& Message,
+        FLinearColor Color = FLinearColor::White);
+    void UpdatePlayerCount(int32 Current, int32 Max);
 };
