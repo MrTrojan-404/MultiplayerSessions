@@ -6,6 +6,13 @@
 #include "OnlineSessionSettings.h"
 #include "Online/OnlineSessionNames.h"
 
+static IOnlineSubsystem* GetNullOSS()
+{
+    // Try Null explicitly first, fall back to default
+    IOnlineSubsystem* Null = IOnlineSubsystem::Get(FName("Null"));
+    return Null ? Null : GetNullOSS();
+}
+
 FNexusNullOnline::FNexusNullOnline(UGameInstance* InGameInstance)
     : GameInstance(InGameInstance)
 {
@@ -19,7 +26,7 @@ UWorld* FNexusNullOnline::GetWorld() const
 
 FString FNexusNullOnline::GetDisplayName() const
 {
-    IOnlineSubsystem* OSS = IOnlineSubsystem::Get();
+    IOnlineSubsystem* OSS = GetNullOSS();
     if (!OSS) return FPlatformProcess::UserName(false);
     IOnlineIdentityPtr Identity = OSS->GetIdentityInterface();
     if (!Identity.IsValid()) return FPlatformProcess::UserName(false);
@@ -29,7 +36,7 @@ FString FNexusNullOnline::GetDisplayName() const
 
 FString FNexusNullOnline::GetUserId() const
 {
-    IOnlineSubsystem* OSS = IOnlineSubsystem::Get();
+    IOnlineSubsystem* OSS = GetNullOSS();
     if (!OSS) return FPlatformMisc::GetLoginId();
     IOnlineIdentityPtr Identity = OSS->GetIdentityInterface();
     if (!Identity.IsValid()) return FPlatformMisc::GetLoginId();
@@ -44,7 +51,7 @@ FString FNexusNullOnline::GetAuthTicket() const
 
 bool FNexusNullOnline::IsAvailable() const
 {
-    IOnlineSubsystem* OSS = IOnlineSubsystem::Get();
+    IOnlineSubsystem* OSS = GetNullOSS();
     return OSS != nullptr;
 }
 
@@ -52,7 +59,7 @@ void FNexusNullOnline::CreateSession(const FNexusSessionConfig& Config)
 {
     NEXUS_LOG("[NullOnline] CreateSession: Players=%d | LAN", Config.MaxPlayers);
 
-    IOnlineSubsystem* OSS = IOnlineSubsystem::Get();
+    IOnlineSubsystem* OSS = GetNullOSS();
     if (!OSS) { if (OnCreateComplete) OnCreateComplete(false); return; }
 
     IOnlineSessionPtr Sessions = OSS->GetSessionInterface();
@@ -65,16 +72,16 @@ void FNexusNullOnline::CreateSession(const FNexusSessionConfig& Config)
     }
 
     FOnlineSessionSettings Settings;
-    Settings.bIsLANMatch            = true;
-    Settings.NumPublicConnections   = Config.MaxPlayers;
-    Settings.bAllowJoinInProgress   = true;
-    Settings.bAllowJoinViaPresence  = true;
-    Settings.bShouldAdvertise       = true;
-    Settings.bUsesPresence          = true;
+    Settings.bIsLANMatch = true;
+    Settings.NumPublicConnections = Config.MaxPlayers;
+    Settings.bAllowJoinInProgress = true;
+    Settings.bAllowJoinViaPresence = false;
+    Settings.bShouldAdvertise = true;
+    Settings.bUsesPresence = false;
     Settings.bUseLobbiesIfAvailable = false;
-    Settings.BuildUniqueId          = 1;
+    Settings.BuildUniqueId = 1;
     Settings.Set(FName("MatchType"), Config.MatchType,
-        EOnlineDataAdvertisementType::ViaOnlineServiceAndPing);
+    EOnlineDataAdvertisementType::ViaPingOnly);
 
     // Bind create delegate
     OnCreateDelegateHandle = Sessions->AddOnCreateSessionCompleteDelegate_Handle(
@@ -110,7 +117,7 @@ void FNexusNullOnline::FindSessions(int32 MaxResults)
 {
     NEXUS_LOG("[NullOnline] FindSessions: Max=%d", MaxResults);
 
-    IOnlineSubsystem* OSS = IOnlineSubsystem::Get();
+    IOnlineSubsystem* OSS = GetNullOSS();
     if (!OSS) { if (OnFindComplete) OnFindComplete({}, false); return; }
 
     IOnlineSessionPtr Sessions = OSS->GetSessionInterface();
@@ -155,7 +162,7 @@ void FNexusNullOnline::FindSessions(int32 MaxResults)
 
 void FNexusNullOnline::JoinSession(const FOnlineSessionSearchResult& Result)
 {
-    IOnlineSubsystem* OSS = IOnlineSubsystem::Get();
+    IOnlineSubsystem* OSS = GetNullOSS();
     if (!OSS) { if (OnJoinComplete) OnJoinComplete(false); return; }
 
     IOnlineSessionPtr Sessions = OSS->GetSessionInterface();
@@ -205,7 +212,7 @@ void FNexusNullOnline::FindSessionByAttribute(const FString& Key, const FString&
 
 void FNexusNullOnline::DestroySession()
 {
-    IOnlineSubsystem* OSS = IOnlineSubsystem::Get();
+    IOnlineSubsystem* OSS = GetNullOSS();
     if (!OSS) { if (OnDestroyComplete) OnDestroyComplete(false); return; }
 
     IOnlineSessionPtr Sessions = OSS->GetSessionInterface();

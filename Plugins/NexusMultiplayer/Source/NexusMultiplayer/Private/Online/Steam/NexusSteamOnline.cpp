@@ -3,6 +3,7 @@
 #include "Online/Steam/NexusSteamOnline.h"
 #include "Core/NexusLog.h"
 #include "OnlineSubsystemUtils.h"
+#include "Core/NexusMultiplayerSettings.h"
 #include "Online/OnlineSessionNames.h"
 #include "Interfaces/OnlineIdentityInterface.h"
 
@@ -100,7 +101,7 @@ void FNexusSteamOnline::CreateSessionInternal(
 {
     NEXUS_LOG("[SteamOnline] CreateSessionInternal: Players=%d | Type='%s' | Private=%s",
         NumPlayers, *MatchType, bPrivate ? TEXT("YES") : TEXT("NO"));
-    
+
     if (!EnsureSessionInterface())
     {
         if (OnCreateComplete) OnCreateComplete(false);
@@ -114,27 +115,33 @@ void FNexusSteamOnline::CreateSessionInternal(
         return;
     }
 
+    // ── LAN detection — use settings flag, NOT OSS name ──────────────────────
+    const UNexusMultiplayerSettings* S = UNexusMultiplayerSettings::Get();
+    const bool bLAN = S && S->OnlineMode == ENexusOnlineMode::Null;
+
+    NEXUS_LOG("[SteamOnline] CreateSessionInternal: LAN=%s", bLAN ? TEXT("YES") : TEXT("NO"));
+
     CreateSessionHandle =
         SessionInterface->AddOnCreateSessionCompleteDelegate_Handle(OnCreateDelegate);
 
-    IOnlineSubsystem* OSS = Online::GetSubsystem(GetWorld());
-
     LastSessionSettings = MakeShareable(new FOnlineSessionSettings());
-    LastSessionSettings->bIsLANMatch            = (OSS && OSS->GetSubsystemName() == "NULL");
+    LastSessionSettings->bIsLANMatch            = bLAN;
     LastSessionSettings->NumPublicConnections   = NumPlayers;
     LastSessionSettings->bAllowJoinInProgress   = true;
-    LastSessionSettings->bAllowJoinViaPresence  = !bPrivate;
+    LastSessionSettings->bAllowJoinViaPresence  = !bLAN && !bPrivate;
     LastSessionSettings->bShouldAdvertise       = !bPrivate;
-    LastSessionSettings->bUsesPresence          = true;
-    LastSessionSettings->bUseLobbiesIfAvailable = true;
+    LastSessionSettings->bUsesPresence          = !bLAN;
+    LastSessionSettings->bUseLobbiesIfAvailable = !bLAN;
     LastSessionSettings->BuildUniqueId          = 1;
     LastSessionSettings->Set(FName("MatchType"), MatchType,
-        EOnlineDataAdvertisementType::ViaOnlineServiceAndPing);
+        bLAN ? EOnlineDataAdvertisementType::ViaPingOnly
+             : EOnlineDataAdvertisementType::ViaOnlineServiceAndPing);
 
     FString DisplayName = GetDisplayName();
     if (!DisplayName.IsEmpty())
         LastSessionSettings->Set(FName("HostDisplayName"), DisplayName,
-            EOnlineDataAdvertisementType::ViaOnlineServiceAndPing);
+            bLAN ? EOnlineDataAdvertisementType::ViaPingOnly
+                 : EOnlineDataAdvertisementType::ViaOnlineServiceAndPing);
 
     const bool bCalled = SessionInterface->CreateSession(
         *PlayerId, NAME_GameSession, *LastSessionSettings);
@@ -157,14 +164,22 @@ void FNexusSteamOnline::FindSessions(int32 MaxResults)
     TSharedPtr<const FUniqueNetId> PlayerId = GetLocalPlayerId();
     if (!PlayerId.IsValid()) { if (OnFindComplete) OnFindComplete({}, false); return; }
 
+    // ── LAN detection — use settings flag, NOT OSS name ──────────────────────
+    const UNexusMultiplayerSettings* S = UNexusMultiplayerSettings::Get();
+    const bool bLAN = S && S->OnlineMode == ENexusOnlineMode::Null;
+
+    NEXUS_LOG("[SteamOnline] FindSessions: Max=%d | LAN=%s",
+        MaxResults, bLAN ? TEXT("YES") : TEXT("NO"));
+
     FindSessionsHandle =
         SessionInterface->AddOnFindSessionsCompleteDelegate_Handle(OnFindDelegate);
 
-    IOnlineSubsystem* OSS = IOnlineSubsystem::Get();
     LastSessionSearch = MakeShareable(new FOnlineSessionSearch());
     LastSessionSearch->MaxSearchResults = FMath::Clamp(MaxResults, 1, 200);
-    LastSessionSearch->bIsLanQuery      = (OSS && OSS->GetSubsystemName() == "NULL");
-    LastSessionSearch->QuerySettings.Set(SEARCH_LOBBIES, true, EOnlineComparisonOp::Equals);
+    LastSessionSearch->bIsLanQuery      = bLAN;
+
+    if (!bLAN)
+        LastSessionSearch->QuerySettings.Set(SEARCH_LOBBIES, true, EOnlineComparisonOp::Equals);
 
     if (!SessionInterface->FindSessions(*PlayerId, LastSessionSearch.ToSharedRef()))
     {

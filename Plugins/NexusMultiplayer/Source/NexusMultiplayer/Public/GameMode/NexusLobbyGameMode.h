@@ -5,6 +5,7 @@
 #include "GameFramework/GameModeBase.h"
 #include "NexusLobbyGameMode.generated.h"
 
+struct FNexusPlayerInfo;
 class ANexusLobbyGameState;
 class UNexusMultiplayerSubsystem;
 
@@ -33,6 +34,7 @@ class NEXUSMULTIPLAYER_API ANexusLobbyGameMode : public AGameModeBase
 
 public:
     ANexusLobbyGameMode();
+    void BeginPlay();
 
     virtual void PostLogin(APlayerController* NewPlayer) override;
     virtual void Logout(AController* Exiting) override;
@@ -69,4 +71,9 @@ private:
 
     UNexusMultiplayerSubsystem* GetSubsystem() const;
     ANexusLobbyGameState*       GetNexusGameState() const;
+
+    bool bMatchCodeBound = false;
+
+    UFUNCTION()
+    void HandleMatchCodeReady(const FString& Code);
 };

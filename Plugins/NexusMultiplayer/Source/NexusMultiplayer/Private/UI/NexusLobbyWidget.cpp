@@ -8,8 +8,7 @@
 #include "Components/Button.h"
 #include "Components/TextBlock.h"
 #include "Components/VerticalBox.h"
-#include "GameFramework/GameStateBase.h"
-#include "GameState/NexusLobbyGameState.h"
+
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 
@@ -32,6 +31,11 @@ void UNexusLobbyWidget::NativeConstruct()
         PC->SetShowMouseCursor(true);
     }
 
+    if (MatchCodePanel)
+        MatchCodePanel->SetVisibility(ESlateVisibility::Collapsed);
+    if (MatchCodeText)
+        MatchCodeText->SetVisibility(ESlateVisibility::Collapsed);
+    
     // ── Subsystem ─────────────────────────────────────────────────────────
 
     if (UGameInstance* GI = GetGameInstance())
@@ -60,7 +64,7 @@ void UNexusLobbyWidget::NativeConstruct()
     if (StartButton)
         StartButton->OnClicked.AddDynamic(
             this, &UNexusLobbyWidget::HandleStartClicked);
-
+    
     // ── Initial state ─────────────────────────────────────────────────────
 
     SetStatus(TEXT("Waiting for players..."));
@@ -127,6 +131,9 @@ void UNexusLobbyWidget::TryBindGameState()
 
     // Race condition fix — data may already exist before we bound
     const FString ExistingCode = GS->GetMatchCode();
+    NEXUS_LOG("[LobbyWidget] TryBindGameState — existing code: '%s'", *ExistingCode);  // ← add this
+    if (!ExistingCode.IsEmpty())
+        HandleMatchCodeReady(ExistingCode);
     if (!ExistingCode.IsEmpty())
         HandleMatchCodeReady(ExistingCode);
 
@@ -139,33 +146,27 @@ void UNexusLobbyWidget::TryBindGameState()
 
 void UNexusLobbyWidget::SetupForRole()
 {
-    const bool bIsHost = GetOwningPlayer() &&
-        GetWorld()->GetNetMode() == NM_ListenServer;
+    // Use subsystem IsHost() — reliable in both PIE and packaged
+    // NM_ListenServer is only set once a client connects, not on session creation
+    UNexusMultiplayerSubsystem* Sub = GetSubsystem();
+    const bool bIsHost = Sub && Sub->IsHost();
 
     NEXUS_LOG("[LobbyWidget] SetupForRole — IsHost: %s",
         bIsHost ? TEXT("YES") : TEXT("NO"));
 
-    // Match code panel only visible to host
     if (MatchCodePanel)
         MatchCodePanel->SetVisibility(
-            bIsHost ? ESlateVisibility::Visible
-                    : ESlateVisibility::Collapsed);
+            bIsHost ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
 
-    // Start button only visible to host
     if (StartButton)
         StartButton->SetVisibility(
-            bIsHost ? ESlateVisibility::Visible
-                    : ESlateVisibility::Collapsed);
+            bIsHost ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
 
-    // Session type display
     if (SessionTypeText)
     {
-        if (UNexusMultiplayerSubsystem* Sub = GetSubsystem())
-        {
-            const bool bPrivate = Sub->IsSessionPrivate();
-            SessionTypeText->SetText(
-                FText::FromString(bPrivate ? TEXT("Private") : TEXT("Public")));
-        }
+        if (Sub)
+            SessionTypeText->SetText(FText::FromString(
+                Sub->IsSessionPrivate() ? TEXT("Private") : TEXT("Public")));
     }
 }
 
@@ -187,15 +188,13 @@ void UNexusLobbyWidget::HandleLeaveClicked()
 
 void UNexusLobbyWidget::HandleStartClicked()
 {
-    // Only the host should ever see or click this
-    if (GetWorld()->GetNetMode() != NM_ListenServer)
+    UNexusMultiplayerSubsystem* Sub = GetSubsystem();
+
+    if (!Sub || !Sub->IsHost())
     {
         NEXUS_WARN("[LobbyWidget] Start clicked by non-host — ignoring");
         return;
     }
-
-    UNexusMultiplayerSubsystem* Sub = GetSubsystem();
-    if (!Sub) return;
 
     const FString GameMap = Sub->GetLastSessionConfig().GameMapPath;
 

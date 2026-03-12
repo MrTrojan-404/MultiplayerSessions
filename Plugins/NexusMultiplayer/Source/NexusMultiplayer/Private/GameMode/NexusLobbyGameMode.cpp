@@ -13,6 +13,25 @@ ANexusLobbyGameMode::ANexusLobbyGameMode()
 {
     // Set our replicated game state so MatchCode + PlayerList replicate to clients
     GameStateClass = ANexusLobbyGameState::StaticClass();
+
+    bUseSeamlessTravel = true;
+}
+
+void ANexusLobbyGameMode::BeginPlay()
+{
+    Super::BeginPlay();
+
+    if (UNexusMultiplayerSubsystem* Sub =
+        GetGameInstance()->GetSubsystem<UNexusMultiplayerSubsystem>())
+    {
+        Sub->OnMatchCodeReady.AddDynamic(
+            this, &ANexusLobbyGameMode::HandleMatchCodeReady);
+        bMatchCodeBound = true;
+
+        const FString Existing = Sub->GetActiveMatchCode();
+        if (!Existing.IsEmpty())
+            HandleMatchCodeReady(Existing);
+    }
 }
 
 // ── PostLogin ─────────────────────────────────────────────────────────────────
@@ -21,6 +40,24 @@ void ANexusLobbyGameMode::PostLogin(APlayerController* NewPlayer)
 {
     Super::PostLogin(NewPlayer);
 
+    // Bind to subsystem OnMatchCodeReady if not already done
+    if (!bMatchCodeBound)
+    {
+        UGameInstance* GI = GetGameInstance();
+        if (UNexusMultiplayerSubsystem* Sub =
+            GI->GetSubsystem<UNexusMultiplayerSubsystem>())
+        {
+            Sub->OnMatchCodeReady.AddDynamic(
+                this, &ANexusLobbyGameMode::HandleMatchCodeReady);
+            bMatchCodeBound = true;
+
+            // Race condition fix — code may already be ready
+            const FString Existing = Sub->GetActiveMatchCode();
+            if (!Existing.IsEmpty())
+                HandleMatchCodeReady(Existing);
+        }
+    }
+    
     const int32 PlayerCount = GameState->PlayerArray.Num();
 
     NEXUS_LOG("[LobbyGameMode] PostLogin — total players: %d", PlayerCount);
@@ -28,6 +65,7 @@ void ANexusLobbyGameMode::PostLogin(APlayerController* NewPlayer)
     AddPlayerToGameState(NewPlayer);
     TryTravelToGame();
 }
+
 
 // ── Logout ────────────────────────────────────────────────────────────────────
 
@@ -176,4 +214,11 @@ ANexusLobbyGameState* ANexusLobbyGameMode::GetNexusGameState() const
                     "make sure GameStateClass is set correctly in ANexusLobbyGameMode defaults");
     }
     return GS;
+}
+void ANexusLobbyGameMode::HandleMatchCodeReady(const FString& Code)
+{
+    NEXUS_SUCCESS("[LobbyGameMode] Match code received: '%s' — writing to GameState", *Code);
+
+    if (ANexusLobbyGameState* GS = GetGameState<ANexusLobbyGameState>())
+        GS->SetMatchCode(Code);
 }

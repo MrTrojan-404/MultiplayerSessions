@@ -2,6 +2,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "NexusMultiplayerSettings.h"
 #include "Subsystems/GameInstanceSubsystem.h"
 #include "Core/NexusTypes.h"
 #include "OnlineSessionSettings.h"
@@ -96,6 +97,14 @@ public:
 
     UFUNCTION(BlueprintPure, Category = "Nexus|Identity")
     FString GetLocalUserId() const;
+
+    UFUNCTION(BlueprintPure, Category = "Nexus|Session")
+    bool IsJoinByCodeSupported() const
+    {
+        const UNexusMultiplayerSettings* S = UNexusMultiplayerSettings::Get();
+        return S->BackendMode == ENexusBackendMode::Nakama
+            || S->OnlineMode == ENexusOnlineMode::Steam;
+    }
     
 private:
     // ── Layer instances ───────────────────────────────────────────────────────
@@ -143,5 +152,6 @@ private:
     FNexusServerRow MakeServerRow(const FOnlineSessionSearchResult& Result) const;
     const FOnlineSessionSearchResult* FindResultBySessionId(const FString& SessionId) const;
     void TravelToSession();
+    
     
 };

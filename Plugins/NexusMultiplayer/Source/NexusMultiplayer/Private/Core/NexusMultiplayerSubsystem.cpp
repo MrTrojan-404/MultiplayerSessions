@@ -368,7 +368,7 @@ void UNexusMultiplayerSubsystem::HandleCreateComplete(bool bSuccess)
     World->ServerTravel(TravelURL);
 
     // If private session, generate and store a match code
-    if (bIsPrivate && MatchCodeLayer.IsValid())
+    if (MatchCodeLayer.IsValid())
     {
         const FString Code = MatchCodeLayer->GenerateCode();
         NEXUS_LOG("[Subsystem] Private session — generated code '%s'. Storing...", *Code);
@@ -428,8 +428,11 @@ void UNexusMultiplayerSubsystem::HandleJoinComplete(bool bSuccess)
 
 void UNexusMultiplayerSubsystem::HandleDestroyComplete(bool bSuccess)
 {
-    NEXUS_LOG("[Subsystem] Session destroyed. Success=%s",
-        bSuccess ? TEXT("YES") : TEXT("NO"));
+    // If we intentionally traveled to game map, ignore destroy callbacks
+    // (UE destroys the session internally during ServerTravel)
+    NEXUS_LOG("[Subsystem] Session destroyed. Success=%s | IsHost=%s",
+        bSuccess ? TEXT("YES") : TEXT("NO"),
+        bIsHost ? TEXT("YES") : TEXT("NO"));
 }
 
 // ─── Match Code Callbacks ─────────────────────────────────────────────────────
@@ -480,6 +483,29 @@ void UNexusMultiplayerSubsystem::HandleSessionFound(FString SessionId)
 void UNexusMultiplayerSubsystem::HandleCodeError(FString Error)
 {
     NEXUS_ERROR("[Subsystem] Match code error: %s", *Error);
+
+    // If Nakama session expired but Steam is available, fall back to Steam match code
+    const UNexusMultiplayerSettings* S = UNexusMultiplayerSettings::Get();
+    if (S->BackendMode == ENexusBackendMode::Nakama
+        && S->OnlineMode == ENexusOnlineMode::Steam
+        && bIsHost && !ActiveMatchCode.IsEmpty() == false)
+    {
+        NEXUS_WARN("[Subsystem] Nakama match code failed — falling back to SteamMatchCode");
+        MatchCodeLayer = MakeShared<FNexusSteamMatchCode>(OnlineLayer);
+        MatchCodeLayer->OnCodeStored  = [this](const FString& Code) { HandleCodeStored(Code); };
+        MatchCodeLayer->OnSessionFound= [this](const FString& Id)   { HandleSessionFound(Id); };
+        MatchCodeLayer->OnCodeError   = [this](const FString& Err)  { HandleCodeError(Err); };
+
+        // Re-attempt with the Steam layer
+        FString SessionId;
+        if (OnlineLayer->GetMode() == ENexusOnlineMode::Steam)
+            SessionId = static_cast<FNexusSteamOnline*>(OnlineLayer.Get())->GetCurrentSessionId();
+
+        const FString Code = MatchCodeLayer->GenerateCode();
+        MatchCodeLayer->StoreCode(Code, SessionId);
+        return;
+    }
+
     OnSessionFailed.Broadcast(Error);
 }
 

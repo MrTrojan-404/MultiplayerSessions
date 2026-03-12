@@ -50,6 +50,13 @@ void UNexusMenuWidget::NativeConstruct()
 
     Subsystem = Sub;
 
+    if (!Sub->IsJoinByCodeSupported())
+    {
+        if (JoinByCodeButton) JoinByCodeButton->SetVisibility(ESlateVisibility::Collapsed);
+        if (CodeInputBox)     CodeInputBox->SetVisibility(ESlateVisibility::Collapsed);
+        NEXUS_LOG("[MenuWidget] JoinByCode not supported in current config — hiding UI");
+    }
+
     // ── Bind buttons ──────────────────────────────────────────────────────
 
     if (HostButton)
