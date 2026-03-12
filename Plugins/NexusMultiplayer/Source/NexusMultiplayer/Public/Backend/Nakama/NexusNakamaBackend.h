@@ -38,12 +38,8 @@ enum class ENexusNakamaAuthProvider : uint8
 class NEXUSMULTIPLAYER_API FNexusNakamaBackend : public INexusBackendInterface
 {
 public:
-    FNexusNakamaBackend(
-        const FString& Host,
-        int32          Port,
-        const FString& ServerKey,
-        bool           bUseSSL,
-        UWorld*        InWorld);
+    explicit FNexusNakamaBackend(const FString& Host, int32 Port,
+    const FString& ServerKey, bool bUseSSL, UGameInstance* InGameInstance);
 
     // INexusBackendInterface
     virtual void    Login() override;
@@ -82,7 +78,9 @@ private:
     int32           Port;
     FString         ServerKey;
     bool            bUseSSL;
-    TWeakObjectPtr<UWorld> World;
+    TWeakObjectPtr<UGameInstance> GameInstance;
+
+    UWorld* GetWorld() const { return GameInstance.IsValid() ? GameInstance->GetWorld() : nullptr; }
 
     // ── Nakama SDK objects ────────────────────────────────────────────────────
     UNakamaClient*  NakamaClient  = nullptr;

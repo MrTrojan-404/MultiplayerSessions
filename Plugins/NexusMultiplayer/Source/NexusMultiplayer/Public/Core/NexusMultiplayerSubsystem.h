@@ -4,12 +4,12 @@
 #include "CoreMinimal.h"
 #include "Subsystems/GameInstanceSubsystem.h"
 #include "Core/NexusTypes.h"
+#include "OnlineSessionSettings.h"
 #include "NexusMultiplayerSubsystem.generated.h"
 
 class INexusOnlineInterface;
 class INexusBackendInterface;
 class INexusMatchCodeInterface;
-class FOnlineSessionSearchResult;
 
 UCLASS()
 class NEXUSMULTIPLAYER_API UNexusMultiplayerSubsystem : public UGameInstanceSubsystem

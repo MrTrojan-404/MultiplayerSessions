@@ -91,19 +91,20 @@ void UNexusMultiplayerSubsystem::SelectLayers()
     {
     case ENexusOnlineMode::Steam:
         NEXUS_LOG("[Subsystem] Online layer: FNexusSteamOnline");
-        OnlineLayer = MakeShared<FNexusSteamOnline>(World);
+        OnlineLayer = MakeShared<FNexusSteamOnline>(GetGameInstance());
+
         break;
 
     case ENexusOnlineMode::EOS:
         // TODO: FNexusEOSOnline — falls through to Null for now
         NEXUS_WARN("[Subsystem] EOS not yet implemented — falling back to Null online layer");
-        OnlineLayer = MakeShared<FNexusNullOnline>();
+        OnlineLayer = MakeShared<FNexusNullOnline>(GetGameInstance());
         break;
 
     case ENexusOnlineMode::Null:
     default:
         NEXUS_LOG("[Subsystem] Online layer: FNexusNullOnline (LAN/Dev)");
-        OnlineLayer = MakeShared<FNexusNullOnline>();
+        OnlineLayer = MakeShared<FNexusNullOnline>(GetGameInstance());
         break;
     }
 
@@ -115,8 +116,8 @@ void UNexusMultiplayerSubsystem::SelectLayers()
         NEXUS_LOG("[Subsystem] Backend layer: FNexusNakamaBackend → %s:%d",
             *S->NakamaHost, S->NakamaPort);
         BackendLayer = MakeShared<FNexusNakamaBackend>(
-            S->NakamaHost, S->NakamaPort, S->NakamaServerKey,
-            S->bNakamaUseSSL, World);
+    S->NakamaHost, S->NakamaPort, S->NakamaServerKey,
+    S->bNakamaUseSSL, GetGameInstance());
         break;
 
     case ENexusBackendMode::PlatformOnly:

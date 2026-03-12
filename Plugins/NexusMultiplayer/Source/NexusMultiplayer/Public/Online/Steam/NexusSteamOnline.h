@@ -9,8 +9,8 @@
 class NEXUSMULTIPLAYER_API FNexusSteamOnline : public INexusOnlineInterface
 {
 public:
-    explicit FNexusSteamOnline(UWorld* InWorld);
-    virtual ~FNexusSteamOnline();
+    explicit FNexusSteamOnline(UGameInstance* InGameInstance);
+    virtual ~FNexusSteamOnline() override;
 
     // INexusOnlineInterface
     virtual FString GetDisplayName() const override;
@@ -33,10 +33,17 @@ public:
     int32   GetDesiredPlayerCount() const { return DesiredNumPublicConnections; }
     FString GetDesiredMatchType() const { return DesiredMatchType; }
 
+    // Helper — gets world lazily at call time, never stale
+    UWorld* GetWorld() const 
+    {
+	    return GameInstance.IsValid() ? GameInstance->GetWorld() : nullptr;
+    }
+
+    
 private:
-    TWeakObjectPtr<UWorld>             World;
-    IOnlineSessionPtr                  SessionInterface;
-    TSharedPtr<FOnlineSessionSearch>   LastSessionSearch;
+    TWeakObjectPtr<UGameInstance> GameInstance;
+    IOnlineSessionPtr SessionInterface;
+    TSharedPtr<FOnlineSessionSearch> LastSessionSearch;
     TSharedPtr<FOnlineSessionSettings> LastSessionSettings;
 
     FDelegateHandle CreateSessionHandle;

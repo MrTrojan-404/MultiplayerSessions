@@ -12,16 +12,10 @@
 // ── Constructor ───────────────────────────────────────────────────────────────
 
 FNexusNakamaBackend::FNexusNakamaBackend(
-    const FString& InHost,
-    int32          InPort,
-    const FString& InServerKey,
-    bool           bInUseSSL,
-    UWorld*        InWorld)
-    : Host(InHost)
-    , Port(InPort)
-    , ServerKey(InServerKey)
-    , bUseSSL(bInUseSSL)
-    , World(InWorld)
+    const FString& Host, int32 Port,
+    const FString& ServerKey, bool bUseSSL,
+    UGameInstance* InGameInstance)
+    : GameInstance(InGameInstance)
 {
     NEXUS_LOG("[Nakama] Backend created. Host: %s:%d | SSL: %s",
         *Host, Port, bUseSSL ? TEXT("YES") : TEXT("NO"));
@@ -60,7 +54,7 @@ void FNexusNakamaBackend::Login()
     NEXUS_LOG("[Nakama] No valid saved session — starting fresh auth");
 
     // Pick auth provider based on what's available
-    IOnlineSubsystem* OSS = Online::GetSubsystem(World.Get());
+    IOnlineSubsystem* OSS = IOnlineSubsystem::Get();
     const bool bSteamAvailable =
         OSS && OSS->GetSubsystemName() == FName("STEAM");
 
@@ -360,7 +354,7 @@ void FNexusNakamaBackend::SaveSession()
 void FNexusNakamaBackend::TrySetBestAvailableName()
 {
     // Priority 1 — Steam display name (best, real identity)
-    IOnlineSubsystem* OSS = Online::GetSubsystem(World.Get());
+    IOnlineSubsystem* OSS = IOnlineSubsystem::Get();
     if (OSS)
     {
         IOnlineIdentityPtr Identity = OSS->GetIdentityInterface();
@@ -394,7 +388,7 @@ void FNexusNakamaBackend::TrySetBestAvailableName()
 
 FString FNexusNakamaBackend::GetSteamAuthTicket() const
 {
-    IOnlineSubsystem* OSS = Online::GetSubsystem(World.Get());
+    IOnlineSubsystem* OSS = IOnlineSubsystem::Get();
     if (!OSS) return FString();
     IOnlineIdentityPtr Identity = OSS->GetIdentityInterface();
     if (!Identity.IsValid()) return FString();

@@ -6,8 +6,8 @@
 #include "Online/OnlineSessionNames.h"
 #include "Interfaces/OnlineIdentityInterface.h"
 
-FNexusSteamOnline::FNexusSteamOnline(UWorld* InWorld)
-    : World(InWorld)
+FNexusSteamOnline::FNexusSteamOnline(UGameInstance* InGameInstance)
+    : GameInstance(InGameInstance)
 {
     OnCreateDelegate  = FOnCreateSessionCompleteDelegate::CreateRaw(
         this, &FNexusSteamOnline::HandleCreateSessionComplete);
@@ -37,7 +37,7 @@ FNexusSteamOnline::~FNexusSteamOnline()
 
 FString FNexusSteamOnline::GetDisplayName() const
 {
-    IOnlineSubsystem* OSS = Online::GetSubsystem(World.Get());
+    IOnlineSubsystem* OSS = IOnlineSubsystem::Get();
     if (!OSS) return FString();
     IOnlineIdentityPtr Identity = OSS->GetIdentityInterface();
     if (!Identity.IsValid()) return FString();
@@ -46,17 +46,16 @@ FString FNexusSteamOnline::GetDisplayName() const
 
 FString FNexusSteamOnline::GetUserId() const
 {
-    IOnlineSubsystem* OSS = Online::GetSubsystem(World.Get());
+    IOnlineSubsystem* OSS = IOnlineSubsystem::Get();
     if (!OSS) return FString();
     IOnlineIdentityPtr Identity = OSS->GetIdentityInterface();
     if (!Identity.IsValid()) return FString();
     TSharedPtr<const FUniqueNetId> Id = Identity->GetUniquePlayerId(0);
     return Id.IsValid() ? Id->ToString() : FString();
 }
-
 FString FNexusSteamOnline::GetAuthTicket() const
 {
-    IOnlineSubsystem* OSS = Online::GetSubsystem(World.Get());
+    IOnlineSubsystem* OSS = Online::GetSubsystem(GetWorld());
     if (!OSS) return FString();
     IOnlineIdentityPtr Identity = OSS->GetIdentityInterface();
     if (!Identity.IsValid()) return FString();
@@ -65,8 +64,8 @@ FString FNexusSteamOnline::GetAuthTicket() const
 
 bool FNexusSteamOnline::IsAvailable() const
 {
-    IOnlineSubsystem* OSS = Online::GetSubsystem(World.Get());
-    return OSS && OSS->GetSubsystemName() == FName("STEAM");
+    IOnlineSubsystem* OSS = Online::GetSubsystem(GetWorld());
+    return OSS && OSS->GetSubsystemName() == FName("Steam");
 }
 
 // ── Create ────────────────────────────────────────────────────────────────────
@@ -99,6 +98,9 @@ void FNexusSteamOnline::CreateSession(const FNexusSessionConfig& Config)
 void FNexusSteamOnline::CreateSessionInternal(
     int32 NumPlayers, const FString& MatchType, bool bPrivate)
 {
+    NEXUS_LOG("[SteamOnline] CreateSessionInternal: Players=%d | Type='%s' | Private=%s",
+        NumPlayers, *MatchType, bPrivate ? TEXT("YES") : TEXT("NO"));
+    
     if (!EnsureSessionInterface())
     {
         if (OnCreateComplete) OnCreateComplete(false);
@@ -115,7 +117,7 @@ void FNexusSteamOnline::CreateSessionInternal(
     CreateSessionHandle =
         SessionInterface->AddOnCreateSessionCompleteDelegate_Handle(OnCreateDelegate);
 
-    IOnlineSubsystem* OSS = Online::GetSubsystem(World.Get());
+    IOnlineSubsystem* OSS = Online::GetSubsystem(GetWorld());
 
     LastSessionSettings = MakeShareable(new FOnlineSessionSettings());
     LastSessionSettings->bIsLANMatch            = (OSS && OSS->GetSubsystemName() == "NULL");
@@ -158,7 +160,7 @@ void FNexusSteamOnline::FindSessions(int32 MaxResults)
     FindSessionsHandle =
         SessionInterface->AddOnFindSessionsCompleteDelegate_Handle(OnFindDelegate);
 
-    IOnlineSubsystem* OSS = Online::GetSubsystem(World.Get());
+    IOnlineSubsystem* OSS = IOnlineSubsystem::Get();
     LastSessionSearch = MakeShareable(new FOnlineSessionSearch());
     LastSessionSearch->MaxSearchResults = FMath::Clamp(MaxResults, 1, 200);
     LastSessionSearch->bIsLanQuery      = (OSS && OSS->GetSubsystemName() == "NULL");
@@ -185,7 +187,7 @@ void FNexusSteamOnline::FindSessionByAttribute(const FString& Key, const FString
     FindSessionsHandle =
         SessionInterface->AddOnFindSessionsCompleteDelegate_Handle(OnFindDelegate);
 
-    IOnlineSubsystem* OSS = Online::GetSubsystem(World.Get());
+    IOnlineSubsystem* OSS = IOnlineSubsystem::Get();
     const bool bIsLAN = OSS && OSS->GetSubsystemName() == "NULL";
 
     LastSessionSearch = MakeShareable(new FOnlineSessionSearch());
@@ -214,7 +216,7 @@ void FNexusSteamOnline::JoinSessionById(const FString& SessionId)
     FindSessionsHandle =
         SessionInterface->AddOnFindSessionsCompleteDelegate_Handle(OnFindDelegate);
 
-    IOnlineSubsystem* OSS = Online::GetSubsystem(World.Get());
+    IOnlineSubsystem* OSS = Online::GetSubsystem(GetWorld());
     const bool bIsLAN = OSS && OSS->GetSubsystemName() == "NULL";
 
     LastSessionSearch = MakeShareable(new FOnlineSessionSearch());
@@ -391,18 +393,25 @@ void FNexusSteamOnline::HandleDestroySessionComplete(FName SessionName, bool bWa
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+// EnsureSessionInterface — replace Online::GetSubsystem with direct Get()
 bool FNexusSteamOnline::EnsureSessionInterface()
 {
-    if (!World.IsValid()) return false;
-    IOnlineSubsystem* OSS = Online::GetSubsystem(World.Get());
-    if (!OSS) return false;
+    // Use IOnlineSubsystem::Get() directly — more reliable in packaged builds
+    // than the world-context version
+    IOnlineSubsystem* OSS = IOnlineSubsystem::Get();
+    if (!OSS)
+    {
+        NEXUS_ERROR("[SteamOnline] IOnlineSubsystem::Get() returned null");
+        return false;
+    }
     SessionInterface = OSS->GetSessionInterface();
     return SessionInterface.IsValid();
 }
 
 TSharedPtr<const FUniqueNetId> FNexusSteamOnline::GetLocalPlayerId() const
 {
-    if (!World.IsValid()) return nullptr;
+    UWorld* World = GetWorld();
+    if (!World) return nullptr;
     const ULocalPlayer* LocalPlayer = World->GetFirstLocalPlayerFromController();
     if (!LocalPlayer) return nullptr;
     const FUniqueNetIdRepl UniqueId = LocalPlayer->GetPreferredUniqueNetId();
