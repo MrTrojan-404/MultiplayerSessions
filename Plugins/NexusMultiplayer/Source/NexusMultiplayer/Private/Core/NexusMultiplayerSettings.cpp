@@ -147,6 +147,16 @@ bool UNexusMultiplayerSettings::IsValid(FString& OutError) const
             OutError = TEXT("EOS Client Secret is empty");
             return false;
         }
+        if (EOSSandboxId.IsEmpty())
+        {
+            OutError = TEXT("EOS Sandbox ID is empty");
+            return false;
+        }
+        if (EOSDeploymentId.IsEmpty())
+        {
+            OutError = TEXT("EOS Deployment ID is empty");
+            return false;
+        }
     }
 
     // ── Backend checks ─────────────────────────────────────────────────

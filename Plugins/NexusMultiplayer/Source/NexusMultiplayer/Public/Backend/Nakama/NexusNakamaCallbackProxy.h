@@ -7,6 +7,7 @@
 #include "NakamaError.h"
 #include "NakamaAccount.h"
 #include "NakamaStorageObject.h"
+#include "NakamaLeaderboard.h"
 #include "NexusNakamaCallbackProxy.generated.h"
 
 class FNexusNakamaBackend;
@@ -45,6 +46,18 @@ public:
 
 	UFUNCTION()
 	void OnUpdateAccountError(const FNakamaError& Error);
+
+	UFUNCTION()
+	void OnWriteLeaderboardSuccess(const FNakamaLeaderboardRecord& Record);
+
+	UFUNCTION()
+	void OnWriteLeaderboardError(const FNakamaError& Error);
+
+	UFUNCTION()
+	void OnListLeaderboardSuccess(const FNakamaLeaderboardRecordList& RecordList);
+
+	UFUNCTION()
+	void OnListLeaderboardError(const FNakamaError& Error);
 };
 
 /**
@@ -77,5 +90,4 @@ public:
 
 	UFUNCTION()
 	void OnDeleteSuccess();
-	
 };

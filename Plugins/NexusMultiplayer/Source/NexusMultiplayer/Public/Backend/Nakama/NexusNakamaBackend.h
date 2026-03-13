@@ -11,10 +11,14 @@ class UNakamaSession;
 struct FNakamaError;
 struct FNakamaAccount;
 
+#define NEXUS_NAKAMA_SESSION_SLOT TEXT("NexusNakamaSession")
+#define NEXUS_DEVICE_ID_SLOT      TEXT("NexusDeviceId")
+
 UENUM()
 enum class ENexusNakamaAuthProvider : uint8
 {
     None,
+    EOSConnect,  //priority 1
     Steam,
     Device,
     Email,
@@ -72,6 +76,11 @@ public:
     // Display name callbacks
     void HandleSetDisplayNameSuccess();
     void HandleSetDisplayNameError(const FNakamaError& Error);
+
+    void HandleWriteLeaderboardSuccess(const FNakamaLeaderboardRecord& Record);
+    void HandleWriteLeaderboardError(const FNakamaError& Error);
+    void HandleListLeaderboardSuccess(const FNakamaLeaderboardRecordList& RecordList);
+    void HandleListLeaderboardError(const FNakamaError& Error);
 private:
     // ── Config ────────────────────────────────────────────────────────────────
     FString         Host;
@@ -91,6 +100,7 @@ private:
     FString PendingDisplayName;
 
     // ── Auth ──────────────────────────────────────────────────────────────────
+    void LoginWithEOSConnect();
     void LoginWithSteam();
     void LoginWithDevice();
 
@@ -99,10 +109,16 @@ private:
     void SaveSession();
 
     // ── Helpers ───────────────────────────────────────────────────────────────
+    FString GetEOSConnectId() const;
     FString GetSteamAuthTicket() const;
     FString GetDeviceId() const;
     void    TrySetBestAvailableName();
 
     TObjectPtr<UNexusNakamaBackendProxy> Proxy;
+
+    FString PendingLeaderboardId; // tracks which board is in-flight
+
+    bool EnsureClientAndSession(const FString& CallerName) const;
+
     
 };

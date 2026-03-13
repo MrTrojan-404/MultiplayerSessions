@@ -67,3 +67,24 @@ void UNexusNakamaMatchProxy::OnDeleteSuccess()
 {
 	if (Owner) Owner->HandleDeleteSuccess();
 }
+
+void UNexusNakamaBackendProxy::OnWriteLeaderboardSuccess(const FNakamaLeaderboardRecord& Record)
+{
+	if (Owner) Owner->HandleWriteLeaderboardSuccess(Record);
+}
+ 
+void UNexusNakamaBackendProxy::OnWriteLeaderboardError(const FNakamaError& Error)
+{
+	if (Owner) Owner->HandleWriteLeaderboardError(Error);
+}
+ 
+void UNexusNakamaBackendProxy::OnListLeaderboardSuccess(const FNakamaLeaderboardRecordList& RecordList)
+{
+	if (Owner) Owner->HandleListLeaderboardSuccess(RecordList);
+}
+ 
+void UNexusNakamaBackendProxy::OnListLeaderboardError(const FNakamaError& Error)
+{
+	if (Owner) Owner->HandleListLeaderboardError(Error);
+}
+ 

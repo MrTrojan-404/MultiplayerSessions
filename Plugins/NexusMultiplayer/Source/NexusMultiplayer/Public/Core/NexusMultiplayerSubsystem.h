@@ -103,7 +103,8 @@ public:
     {
         const UNexusMultiplayerSettings* S = UNexusMultiplayerSettings::Get();
         return S->BackendMode == ENexusBackendMode::Nakama
-            || S->OnlineMode == ENexusOnlineMode::Steam;
+    || S->OnlineMode  == ENexusOnlineMode::Steam
+    || S->OnlineMode  == ENexusOnlineMode::EOS;
     }
 
     UFUNCTION(BlueprintCallable, Category = "Nexus|Settings")
@@ -111,6 +112,31 @@ public:
 
     UFUNCTION(BlueprintPure, Category = "Nexus|Settings")
     ENexusNetworkMode GetNetworkMode() const { return NetworkMode; }
+
+    void SetTravelingToGame(bool bValue) { bTravelingToGame = bValue; }
+
+    // Leaderboard API
+    UFUNCTION(BlueprintCallable, Category = "Nexus|Leaderboard")
+    void SubmitScore(const FString& LeaderboardId, int64 Score);
+ 
+    UFUNCTION(BlueprintCallable, Category = "Nexus|Leaderboard")
+    void FetchTopScores(const FString& LeaderboardId, int32 Limit = 10);
+ 
+    UFUNCTION(BlueprintPure, Category = "Nexus|Session")
+    ENexusSessionState GetSessionState() const { return SessionState; }
+ 
+    // Leaderboard delegates
+    UPROPERTY(BlueprintAssignable, Category = "Nexus|Events")
+    FNexusOnScoreSubmitted OnScoreSubmitted;
+ 
+    UPROPERTY(BlueprintAssignable, Category = "Nexus|Events")
+    FNexusOnTopScoresFetched OnTopScoresFetched;
+ 
+    UPROPERTY(BlueprintAssignable, Category = "Nexus|Events")
+    FNexusOnLeaderboardError OnLeaderboardError;
+ 
+    UPROPERTY(BlueprintAssignable, Category = "Nexus|Events")
+    FNexusOnSessionStateChanged OnSessionStateChanged;
     
 private:
     // ── Layer instances ───────────────────────────────────────────────────────
@@ -160,5 +186,14 @@ private:
     void TravelToSession();
     
     ENexusNetworkMode NetworkMode = ENexusNetworkMode::Internet;
+
+    bool bTravelingToGame = false;
+
+    ENexusSessionState SessionState = ENexusSessionState::Idle;
+    void SetSessionState(ENexusSessionState NewState);
+ 
+    void HandleScoreSubmitted(FString LeaderboardId);
+    void HandleTopScoresFetched(FString LeaderboardId, TArray<FNexusLeaderboardEntry> Entries);
+    void HandleLeaderboardError(FString Error);
 
 };

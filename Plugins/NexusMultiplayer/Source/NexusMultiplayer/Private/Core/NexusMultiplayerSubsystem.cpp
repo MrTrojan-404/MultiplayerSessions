@@ -23,6 +23,8 @@
 #include "Engine/GameInstance.h"
 #include "OnlineSessionSettings.h"
 #include "Interfaces/OnlineIdentityInterface.h"
+#include "Online/EOS/NexusEOSOnline.h"
+
 
 // ─── Init / Deinit ────────────────────────────────────────────────────────────
 
@@ -35,6 +37,13 @@ void UNexusMultiplayerSubsystem::Initialize(FSubsystemCollectionBase& Collection
     NEXUS_LOG("[Subsystem] Initializing. OnlineMode=%d | BackendMode=%d",
         (int32)Settings->OnlineMode, (int32)Settings->BackendMode);
 
+    IOnlineSubsystem* EOSOSS = IOnlineSubsystem::Get(FName("EOS"));
+    if (EOSOSS)
+    {
+        IOnlineIdentityPtr Identity = EOSOSS->GetIdentityInterface();
+        Identity->Login(0, FOnlineAccountCredentials("persistentauth", "", ""));
+    }
+    
     SelectLayers();
     BindLayerDelegates();
 
@@ -80,6 +89,21 @@ void UNexusMultiplayerSubsystem::Deinitialize()
 
 // ─── Layer Selection ──────────────────────────────────────────────────────────
 
+// Returns the current session ID from whichever platform online layer is active.
+// Works for both Steam and EOS — both expose GetCurrentSessionId().
+static FString GetPlatformSessionId(INexusOnlineInterface* Layer)
+{
+    if (!Layer) return FString();
+
+    if (Layer->GetMode() == ENexusOnlineMode::Steam)
+        return static_cast<FNexusSteamOnline*>(Layer)->GetCurrentSessionId();
+
+    if (Layer->GetMode() == ENexusOnlineMode::EOS)
+        return static_cast<FNexusEOSOnline*>(Layer)->GetCurrentSessionId();
+
+    return FString();
+}
+
 void UNexusMultiplayerSubsystem::SelectLayers()
 {
     const UNexusMultiplayerSettings* S = UNexusMultiplayerSettings::Get();
@@ -96,9 +120,8 @@ void UNexusMultiplayerSubsystem::SelectLayers()
         break;
 
     case ENexusOnlineMode::EOS:
-        // TODO: FNexusEOSOnline — falls through to Null for now
-        NEXUS_WARN("[Subsystem] EOS not yet implemented — falling back to Null online layer");
-        OnlineLayer = MakeShared<FNexusNullOnline>(GetGameInstance());
+        NEXUS_LOG("[Subsystem] Online layer: FNexusEOSOnline");
+        OnlineLayer = MakeShared<FNexusEOSOnline>(GetGameInstance());
         break;
 
     case ENexusOnlineMode::Null:
@@ -137,7 +160,8 @@ void UNexusMultiplayerSubsystem::SelectLayers()
         MatchCodeLayer = MakeShared<FNexusNakamaMatchCode>(
             NakamaBackend->GetClient(), NakamaBackend->GetSession());
     }
-    else if (S->OnlineMode == ENexusOnlineMode::Steam)
+    else if (S->OnlineMode == ENexusOnlineMode::Steam
+          || S->OnlineMode == ENexusOnlineMode::EOS) 
     {
         NEXUS_LOG("[Subsystem] MatchCode layer: FNexusSteamMatchCode");
         MatchCodeLayer = MakeShared<FNexusSteamMatchCode>(OnlineLayer);
@@ -199,6 +223,19 @@ void UNexusMultiplayerSubsystem::BindLayerDelegates()
         {
             HandleLoginError(Error);
         };
+
+        BackendLayer->OnScoreSubmitted = [this](const FString& Id)
+        {
+            HandleScoreSubmitted(Id);
+        };
+        BackendLayer->OnTopScoresFetched = [this](const FString& Id, TArray<FNexusLeaderboardEntry> Entries)
+        {
+            HandleTopScoresFetched(Id, MoveTemp(Entries));
+        };
+        BackendLayer->OnLeaderboardError = [this](const FString& Err)
+        {
+            HandleLeaderboardError(Err);
+        };
     }
 
     // ── MatchCode → subsystem ─────────────────────────────────────────────────
@@ -244,7 +281,9 @@ void UNexusMultiplayerSubsystem::HostSession(FNexusSessionConfig Config)
     bIsHost           = true;
     bIsPrivate        = Config.bPrivate;
     ActiveMatchCode.Empty();
-
+    
+    // HostSession():
+    SetSessionState(ENexusSessionState::Creating); 
     OnlineLayer->CreateSession(Config);
 }
 
@@ -260,6 +299,9 @@ void UNexusMultiplayerSubsystem::FindSessions(int32 MaxResults)
     OnlineLayer->SetLANMode(NetworkMode == ENexusNetworkMode::LAN);
 
     NEXUS_LOG("[Subsystem] FindSessions called. MaxResults=%d", MaxResults);
+    
+    // FindSessions():
+    SetSessionState(ENexusSessionState::Searching);
     OnlineLayer->FindSessions(MaxResults);
 }
 
@@ -314,6 +356,9 @@ void UNexusMultiplayerSubsystem::JoinSessionFromRow(const FNexusServerRow& Row)
         }
  
         OnSessionJoined.Broadcast(true);
+
+        // JoinSessionFromRow():
+        SetSessionState(ENexusSessionState::Joining);
         PC->ClientTravel(Row.HostAddress, TRAVEL_Absolute);
         return;
     }
@@ -332,6 +377,9 @@ void UNexusMultiplayerSubsystem::JoinSessionFromRow(const FNexusServerRow& Row)
     }
  
     bIsHost = false;
+
+    // JoinSessionFromRow():
+    SetSessionState(ENexusSessionState::Joining);
     OnlineLayer->JoinSession(*Result);
 }
 
@@ -408,13 +456,8 @@ void UNexusMultiplayerSubsystem::HandleCreateComplete(bool bSuccess)
         // For Steam: session ID is implicit (we're the active host)
         // For Nakama: subsystem doesn't have the session ID here — SteamOnline
         //             can expose it, so we fetch it if available
-        FString SessionId;
-        if (OnlineLayer->GetMode() == ENexusOnlineMode::Steam)
-        {
-            auto* Steam = static_cast<FNexusSteamOnline*>(OnlineLayer.Get());
-            SessionId = Steam->GetCurrentSessionId();
-        }
-        
+        FString SessionId = GetPlatformSessionId(OnlineLayer.Get());
+       
         MatchCodeLayer->StoreCode(Code, SessionId);
         // Flow continues in HandleCodeStored
     }
@@ -522,6 +565,9 @@ void UNexusMultiplayerSubsystem::HandleSessionFound(FString SessionId)
     {
         NEXUS_LOG("[Subsystem] Session found in cache — joining directly");
         bIsHost = false;
+
+        // JoinSessionFromRow():
+        SetSessionState(ENexusSessionState::Joining);
         OnlineLayer->JoinSession(*Cached);
     }
     else
@@ -540,8 +586,9 @@ void UNexusMultiplayerSubsystem::HandleCodeError(FString Error)
     // If Nakama session expired but Steam is available, fall back to Steam match code
     const UNexusMultiplayerSettings* S = UNexusMultiplayerSettings::Get();
     if (S->BackendMode == ENexusBackendMode::Nakama
-        && S->OnlineMode == ENexusOnlineMode::Steam
-        && bIsHost && !ActiveMatchCode.IsEmpty() == false)
+    && (S->OnlineMode == ENexusOnlineMode::Steam
+     || S->OnlineMode == ENexusOnlineMode::EOS)
+    && bIsHost && ActiveMatchCode.IsEmpty())
     {
         NEXUS_WARN("[Subsystem] Nakama match code failed — falling back to SteamMatchCode");
         MatchCodeLayer = MakeShared<FNexusSteamMatchCode>(OnlineLayer);
@@ -550,12 +597,10 @@ void UNexusMultiplayerSubsystem::HandleCodeError(FString Error)
         MatchCodeLayer->OnCodeError   = [this](const FString& Err)  { HandleCodeError(Err); };
 
         // Re-attempt with the Steam layer
-        FString SessionId;
-        if (OnlineLayer->GetMode() == ENexusOnlineMode::Steam)
-            SessionId = static_cast<FNexusSteamOnline*>(OnlineLayer.Get())->GetCurrentSessionId();
-
+        FString SessionId = GetPlatformSessionId(OnlineLayer.Get());
         const FString Code = MatchCodeLayer->GenerateCode();
         MatchCodeLayer->StoreCode(Code, SessionId);
+        
         return;
     }
 
@@ -614,11 +659,7 @@ FString UNexusMultiplayerSubsystem::GetLocalDisplayName() const
 
 bool UNexusMultiplayerSubsystem::IsInSession() const
 {
-    // Ask the online layer if there's an active named session
-    if (OnlineLayer.IsValid() && OnlineLayer->GetMode() == ENexusOnlineMode::Steam)
-    return !static_cast<FNexusSteamOnline*>(OnlineLayer.Get())->GetCurrentSessionId().IsEmpty();
-
-    return false;
+    return !GetPlatformSessionId(OnlineLayer.Get()).IsEmpty();
 }
 
 bool UNexusMultiplayerSubsystem::IsBackendConnected() const
@@ -667,6 +708,9 @@ void UNexusMultiplayerSubsystem::TravelToSession()
     }
 
     NEXUS_LOG("[Subsystem] Client traveling to: %s", *TravelURL);
+
+    // JoinSessionFromRow():
+    SetSessionState(ENexusSessionState::Joining);
     PC->ClientTravel(TravelURL, TRAVEL_Absolute);
 }
 
@@ -721,4 +765,67 @@ FString UNexusMultiplayerSubsystem::GetLocalUserId() const
 
     // Last resort — machine login ID
     return FPlatformMisc::GetLoginId();
+}
+
+void UNexusMultiplayerSubsystem::SetSessionState(ENexusSessionState NewState)
+{
+    if (SessionState == NewState) return;
+    const ENexusSessionState Old = SessionState;
+    SessionState = NewState;
+    NEXUS_LOG("[Subsystem] SessionState: %d → %d", (int32)Old, (int32)NewState);
+    OnSessionStateChanged.Broadcast(Old, NewState);
+}
+ 
+void UNexusMultiplayerSubsystem::SubmitScore(const FString& LeaderboardId, int64 Score)
+{
+    if (!BackendLayer.IsValid())
+    {
+        NEXUS_ERROR("[Subsystem] SubmitScore: no backend layer");
+        OnLeaderboardError.Broadcast(TEXT("Backend not initialized"));
+        return;
+    }
+    if (!BackendLayer->IsLoggedIn())
+    {
+        NEXUS_ERROR("[Subsystem] SubmitScore: not logged in to backend");
+        OnLeaderboardError.Broadcast(TEXT("Not logged in to backend"));
+        return;
+    }
+    BackendLayer->SubmitScore(LeaderboardId, Score);
+}
+ 
+void UNexusMultiplayerSubsystem::FetchTopScores(const FString& LeaderboardId, int32 Limit)
+{
+    if (!BackendLayer.IsValid())
+    {
+        NEXUS_ERROR("[Subsystem] FetchTopScores: no backend layer");
+        OnLeaderboardError.Broadcast(TEXT("Backend not initialized"));
+        return;
+    }
+    if (!BackendLayer->IsLoggedIn())
+    {
+        NEXUS_ERROR("[Subsystem] FetchTopScores: not logged in to backend");
+        OnLeaderboardError.Broadcast(TEXT("Not logged in to backend"));
+        return;
+    }
+    BackendLayer->FetchTopScores(LeaderboardId, FMath::Clamp(Limit, 1, 100));
+}
+ 
+void UNexusMultiplayerSubsystem::HandleScoreSubmitted(FString LeaderboardId)
+{
+    NEXUS_SUCCESS("[Subsystem] Score submitted to board: %s", *LeaderboardId);
+    OnScoreSubmitted.Broadcast(LeaderboardId);
+}
+ 
+void UNexusMultiplayerSubsystem::HandleTopScoresFetched(
+    FString LeaderboardId, TArray<FNexusLeaderboardEntry> Entries)
+{
+    NEXUS_SUCCESS("[Subsystem] Top scores fetched. Board: %s | Count: %d",
+        *LeaderboardId, Entries.Num());
+    OnTopScoresFetched.Broadcast(LeaderboardId, Entries);
+}
+ 
+void UNexusMultiplayerSubsystem::HandleLeaderboardError(FString Error)
+{
+    NEXUS_ERROR("[Subsystem] Leaderboard error: %s", *Error);
+    OnLeaderboardError.Broadcast(Error);
 }

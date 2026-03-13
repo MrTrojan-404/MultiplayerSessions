@@ -1,4 +1,5 @@
 // Copyright NexusMultiplayer. All Rights Reserved.
+
 #pragma once
 
 #include "CoreMinimal.h"
@@ -22,7 +23,12 @@ public:
 	virtual void FetchTopScores(const FString& LeaderboardId, int32 Limit) = 0;
 
 	// Delegates — set by NexusMultiplayerSubsystem
-	TFunction<void()>         OnAccountLoaded;
-	TFunction<void(FString)>  OnDisplayNameUpdated;
-	TFunction<void(FString)>  OnLoginError;
+	TFunction<void()>                               OnAccountLoaded;
+	TFunction<void(FString)>                        OnDisplayNameUpdated;
+	TFunction<void(FString)>                        OnLoginError;
+
+	// Leaderboard delegates
+	TFunction<void(FString /*LeaderboardId*/)>                          OnScoreSubmitted;
+	TFunction<void(FString /*LeaderboardId*/, TArray<FNexusLeaderboardEntry>)> OnTopScoresFetched;
+	TFunction<void(FString /*Error*/)>                                  OnLeaderboardError;
 };

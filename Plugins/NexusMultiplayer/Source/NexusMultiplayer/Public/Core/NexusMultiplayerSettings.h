@@ -72,6 +72,16 @@ public:
             DisplayName = "Client Secret"))
     FString EOSClientSecret;
 
+    UPROPERTY(Config, EditAnywhere, Category = "EOS",
+    meta = (EditCondition = "OnlineMode == ENexusOnlineMode::EOS",
+        DisplayName = "Sandbox ID"))
+    FString EOSSandboxId;
+
+    UPROPERTY(Config, EditAnywhere, Category = "EOS",
+        meta = (EditCondition = "OnlineMode == ENexusOnlineMode::EOS",
+            DisplayName = "Deployment ID"))
+    FString EOSDeploymentId;
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     static const UNexusMultiplayerSettings* Get()

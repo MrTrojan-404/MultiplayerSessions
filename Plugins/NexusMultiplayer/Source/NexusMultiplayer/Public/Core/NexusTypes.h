@@ -163,6 +163,35 @@ struct FNexusPlayerInfo
     int32 PingMs = 0;
 };
 
+
+// ─── Leaderboard Entry ────────────────────────────────────────────────────────
+ 
+USTRUCT(BlueprintType)
+struct FNexusLeaderboardEntry
+{
+    GENERATED_BODY()
+ 
+    // Nakama user ID
+    UPROPERTY(BlueprintReadOnly, Category = "Nexus|Leaderboard")
+    FString UserId;
+ 
+    // Display name resolved by Nakama
+    UPROPERTY(BlueprintReadOnly, Category = "Nexus|Leaderboard")
+    FString Username;
+ 
+    // The submitted score
+    UPROPERTY(BlueprintReadOnly, Category = "Nexus|Leaderboard")
+    int64 Score = 0;
+ 
+    // Secondary sort score (optional — e.g. time to achieve the score)
+    UPROPERTY(BlueprintReadOnly, Category = "Nexus|Leaderboard")
+    int64 SubScore = 0;
+ 
+    // Rank on the leaderboard (1 = first)
+    UPROPERTY(BlueprintReadOnly, Category = "Nexus|Leaderboard")
+    int32 Rank = 0;
+};
+
 USTRUCT(BlueprintType)
 struct FNexusMapEntry
 {
@@ -233,3 +262,20 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(
     FNexusOnPlayerListUpdated,
     const TArray<FNexusPlayerInfo>&, Players);
+
+// Score submitted successfully
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(
+    FNexusOnScoreSubmitted,
+    const FString&, LeaderboardId);
+ 
+// Top scores fetched — Entries is ordered by rank
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(
+    FNexusOnTopScoresFetched,
+    const FString&, LeaderboardId,
+    const TArray<FNexusLeaderboardEntry>&, Entries);
+ 
+// Leaderboard operation failed
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(
+    FNexusOnLeaderboardError,
+    const FString&, Error);
+ 
