@@ -25,6 +25,30 @@
 #include "Interfaces/OnlineIdentityInterface.h"
 #include "Online/EOS/NexusEOSOnline.h"
 
+static FName GetSubsystemNameFromSettings()
+{
+    const UNexusMultiplayerSettings* S = UNexusMultiplayerSettings::Get();
+
+    switch (S->OnlineMode)
+    {
+    case ENexusOnlineMode::Steam:
+        return FName("STEAM");
+
+    case ENexusOnlineMode::EOS:
+        return FName("EOS");
+
+    case ENexusOnlineMode::Null:
+        return FName("NULL");
+    }
+
+    return NAME_None;
+}
+
+static IOnlineSubsystem* GetPlatformOSS()
+{
+    const FName Name = GetSubsystemNameFromSettings();
+    return IOnlineSubsystem::Get(Name);
+}
 
 // ─── Init / Deinit ────────────────────────────────────────────────────────────
 
@@ -41,7 +65,7 @@ void UNexusMultiplayerSubsystem::Initialize(FSubsystemCollectionBase& Collection
     if (EOSOSS)
     {
         IOnlineIdentityPtr Identity = EOSOSS->GetIdentityInterface();
-        Identity->Login(0, FOnlineAccountCredentials("accountportal ", "", ""));
+        Identity->Login(0, FOnlineAccountCredentials("accountportal", "", ""));
     }
     
     SelectLayers();

@@ -63,7 +63,7 @@ public class NexusMultiplayer : ModuleRules
         // Disabled until FNexusEOSOnline is implemented.
         // To enable: set bEnableEOS = true and add EOS SDK to your project.
 
-        bool bEnableEOS = false;
+        bool bEnableEOS = true;
         if (bEnableEOS)
         {
             PrivateDependencyModuleNames.AddRange(new string[]

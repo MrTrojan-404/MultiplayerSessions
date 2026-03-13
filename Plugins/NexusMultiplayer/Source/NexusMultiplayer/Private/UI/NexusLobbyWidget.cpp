@@ -131,9 +131,7 @@ void UNexusLobbyWidget::TryBindGameState()
 
     // Race condition fix — data may already exist before we bound
     const FString ExistingCode = GS->GetMatchCode();
-    NEXUS_LOG("[LobbyWidget] TryBindGameState — existing code: '%s'", *ExistingCode);  // ← add this
-    if (!ExistingCode.IsEmpty())
-        HandleMatchCodeReady(ExistingCode);
+    NEXUS_LOG("[LobbyWidget] TryBindGameState — existing code: '%s'", *ExistingCode);  
     if (!ExistingCode.IsEmpty())
         HandleMatchCodeReady(ExistingCode);
 

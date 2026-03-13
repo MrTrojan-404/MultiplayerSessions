@@ -20,7 +20,7 @@ public:
     UPROPERTY(Config, EditAnywhere, Category = "Platform",
         meta = (DisplayName = "Online Mode",
             ToolTip = "Which platform handles sessions and matchmaking.\nSteam: requires OnlineSubsystemSteam.\nEOS: requires EOS SDK.\nNull: LAN / dev / PIE — no platform required."))
-    ENexusOnlineMode OnlineMode = ENexusOnlineMode::Steam;
+    ENexusOnlineMode OnlineMode = ENexusOnlineMode::EOS;
 
     // ── Backend ───────────────────────────────────────────────────────────────
 
