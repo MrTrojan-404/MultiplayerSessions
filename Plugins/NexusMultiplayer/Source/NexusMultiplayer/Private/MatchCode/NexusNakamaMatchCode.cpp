@@ -24,8 +24,24 @@ FNexusNakamaMatchCode::FNexusNakamaMatchCode(
 
     Proxy = NewObject<UNexusNakamaMatchProxy>(GetTransientPackage());
     Proxy->Owner = this;
+    Proxy->AddToRoot();
+
+    Proxy->HeldSession = InSession;
+    Proxy->HeldClient  = InClient;    
 
     NEXUS_LOG("[NakamaMatchCode] Created.");
+}
+
+FNexusNakamaMatchCode::~FNexusNakamaMatchCode()
+{
+    if (Proxy)
+    {
+        Proxy->HeldSession = nullptr;
+        Proxy->HeldClient  = nullptr;
+        Proxy->Owner = nullptr;
+        Proxy->RemoveFromRoot();
+        Proxy = nullptr;
+    }
 }
 
 // ── StoreCode ─────────────────────────────────────────────────────────────────

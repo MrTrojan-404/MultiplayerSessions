@@ -76,4 +76,6 @@ private:
 
     UFUNCTION()
     void HandleMatchCodeReady(const FString& Code);
+
+    FString HostUserId;
 };

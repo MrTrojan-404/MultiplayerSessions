@@ -122,10 +122,11 @@ void UNexusLobbyWidget::TryBindGameState()
 
     NEXUS_LOG("[LobbyWidget] GameState found — binding delegates");
 
-    GS->OnMatchCodeReady.AddDynamic(
-        this, &UNexusLobbyWidget::HandleMatchCodeReady);
-    GS->OnPlayerListUpdated.AddDynamic(
-        this, &UNexusLobbyWidget::HandlePlayerListUpdated);
+    if (!GS->OnMatchCodeReady.IsAlreadyBound(this, &UNexusLobbyWidget::HandleMatchCodeReady))
+    {
+        GS->OnMatchCodeReady.AddDynamic(this, &UNexusLobbyWidget::HandleMatchCodeReady);
+    }
+    GS->OnPlayerListUpdated.AddDynamic(this, &UNexusLobbyWidget::HandlePlayerListUpdated);
 
     bGameStateBound = true;
 

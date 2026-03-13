@@ -25,61 +25,69 @@
 #include "Interfaces/OnlineIdentityInterface.h"
 #include "Online/EOS/NexusEOSOnline.h"
 
-static FName GetSubsystemNameFromSettings()
-{
-    const UNexusMultiplayerSettings* S = UNexusMultiplayerSettings::Get();
-
-    switch (S->OnlineMode)
-    {
-    case ENexusOnlineMode::Steam:
-        return FName("STEAM");
-
-    case ENexusOnlineMode::EOS:
-        return FName("EOS");
-
-    case ENexusOnlineMode::Null:
-        return FName("NULL");
-    }
-
-    return NAME_None;
-}
-
-static IOnlineSubsystem* GetPlatformOSS()
-{
-    const FName Name = GetSubsystemNameFromSettings();
-    return IOnlineSubsystem::Get(Name);
-}
 
 // ─── Init / Deinit ────────────────────────────────────────────────────────────
 
 void UNexusMultiplayerSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
     Super::Initialize(Collection);
-
-    const UNexusMultiplayerSettings* Settings = UNexusMultiplayerSettings::Get();
-
-    NEXUS_LOG("[Subsystem] Initializing. OnlineMode=%d | BackendMode=%d",
-        (int32)Settings->OnlineMode, (int32)Settings->BackendMode);
+    SelectLayers();
+    BindLayerDelegates();
 
     IOnlineSubsystem* EOSOSS = IOnlineSubsystem::Get(FName("EOS"));
     if (EOSOSS)
     {
         IOnlineIdentityPtr Identity = EOSOSS->GetIdentityInterface();
-        Identity->Login(0, FOnlineAccountCredentials("accountportal", "", ""));
-    }
-    
-    SelectLayers();
-    BindLayerDelegates();
+        if (Identity.IsValid())
+        {
+            if (Identity->GetLoginStatus(0) == ELoginStatus::LoggedIn)
+            {
+                NEXUS_LOG("[Subsystem] EOS already logged in — starting Nakama directly");
+                if (BackendLayer.IsValid()) BackendLayer->Login();
+                return;
+            }
 
-    NEXUS_LOG("[Subsystem] Layers selected. Starting backend login...");
-    if (BackendLayer.IsValid())
-        BackendLayer->Login();
+            EOSLoginHandle = Identity->AddOnLoginCompleteDelegate_Handle(0,
+                FOnLoginCompleteDelegate::CreateUObject(this,
+                    &UNexusMultiplayerSubsystem::HandleEOSLoginComplete));
+            Identity->Login(0, FOnlineAccountCredentials("accountportal", "", ""));
+            return;
+        }
+    }
+
+    if (BackendLayer.IsValid()) BackendLayer->Login();
+}
+
+void UNexusMultiplayerSubsystem::HandleEOSLoginComplete(
+    int32 LocalUserNum, bool bWasSuccessful,
+    const FUniqueNetId& UserId, const FString& Error)
+{
+    IOnlineSubsystem* EOSOSS = IOnlineSubsystem::Get(FName("EOS"));
+    if (EOSOSS)
+    {
+        IOnlineIdentityPtr Identity = EOSOSS->GetIdentityInterface();
+        if (Identity.IsValid())
+            Identity->ClearOnLoginCompleteDelegate_Handle(0, EOSLoginHandle);
+    }
+
+    if (!bWasSuccessful)
+        NEXUS_WARN("[Subsystem] EOS login failed (%s) — Nakama will use Device auth", *Error);
+
+    if (BackendLayer.IsValid()) BackendLayer->Login();
 }
 
 void UNexusMultiplayerSubsystem::Deinitialize()
 {
     NEXUS_LOG("[Subsystem] Deinitializing");
 
+    IOnlineSubsystem* EOSOSS = IOnlineSubsystem::Get(FName("EOS"));
+    if (EOSOSS)
+    {
+        IOnlineIdentityPtr Identity = EOSOSS->GetIdentityInterface();
+        if (Identity.IsValid())
+            Identity->ClearOnLoginCompleteDelegate_Handle(0, EOSLoginHandle);
+    }
+    
     // Clear all TFunction callbacks before layers are destroyed
     if (OnlineLayer.IsValid())
     {
@@ -184,7 +192,7 @@ void UNexusMultiplayerSubsystem::SelectLayers()
         MatchCodeLayer = MakeShared<FNexusNakamaMatchCode>(
             NakamaBackend->GetClient(), NakamaBackend->GetSession());
     }
-    else if (S->OnlineMode == ENexusOnlineMode::Steam
+   else if (S->OnlineMode == ENexusOnlineMode::Steam
           || S->OnlineMode == ENexusOnlineMode::EOS) 
     {
         NEXUS_LOG("[Subsystem] MatchCode layer: FNexusSteamMatchCode");
@@ -652,6 +660,30 @@ void UNexusMultiplayerSubsystem::HandleAccountLoaded()
 
     if (!Name.IsEmpty())
         OnDisplayNameReady.Broadcast(Name);
+
+    if (BackendLayer->GetMode() == ENexusBackendMode::Nakama)
+    {
+        auto* NakamaBack = static_cast<FNexusNakamaBackend*>(BackendLayer.Get());
+
+        MatchCodeLayer = MakeShared<FNexusNakamaMatchCode>(
+            NakamaBack->GetClient(),
+            NakamaBack->GetSession());
+
+        MatchCodeLayer->OnCodeStored = [this](const FString& Code)
+        {
+            HandleCodeStored(Code);
+        };
+
+        MatchCodeLayer->OnSessionFound = [this](const FString& SessionId)
+        {
+            HandleSessionFound(SessionId);
+        };
+
+        MatchCodeLayer->OnCodeError = [this](const FString& Error)
+        {
+            HandleCodeError(Error);
+        };
+    }
 }
 
 void UNexusMultiplayerSubsystem::HandleDisplayNameUpdated(FString Name)

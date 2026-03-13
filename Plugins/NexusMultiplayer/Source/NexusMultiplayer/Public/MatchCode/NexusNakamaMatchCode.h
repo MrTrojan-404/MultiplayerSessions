@@ -2,6 +2,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Backend/Nakama/NexusNakamaCallbackProxy.h"
 #include "Interfaces/INexusMatchCodeInterface.h"
 
 class UNexusNakamaMatchProxy;
@@ -36,14 +37,18 @@ class NEXUSMULTIPLAYER_API FNexusNakamaMatchCode : public INexusMatchCodeInterfa
 {
 public:
     FNexusNakamaMatchCode(UNakamaClient* InClient, UNakamaSession* InSession);
+    ~FNexusNakamaMatchCode();
 
     virtual void StoreCode(const FString& Code, const FString& SessionId) override;
     virtual void LookupCode(const FString& Code) override;
     virtual void DeleteCode(const FString& Code) override;
 
     // Called by NexusMultiplayerSubsystem when session refreshes
-    void UpdateSession(UNakamaSession* NewSession) { Session = NewSession; }
-
+    void UpdateSession(UNakamaSession* NewSession)
+    {
+        Session = NewSession;
+        if (Proxy) Proxy->HeldSession = NewSession;
+    }
     // Storage callbacks
     void HandleStoreSuccess(const FNakamaStoreObjectAcks& Acks);
     void HandleStoreError(const FNakamaError& Error);
@@ -67,5 +72,7 @@ private:
     bool EnsureClientAndSession(const FString& CallerName) const;
 
     TObjectPtr<UNexusNakamaMatchProxy> Proxy;
+
+    
 
 };

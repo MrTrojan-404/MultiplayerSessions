@@ -2,7 +2,6 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "NakamaClient.h"
 #include "NakamaSession.h"
 #include "NakamaError.h"
 #include "NakamaAccount.h"
@@ -10,6 +9,7 @@
 #include "NakamaLeaderboard.h"
 #include "NexusNakamaCallbackProxy.generated.h"
 
+class UNakamaClient;
 class FNexusNakamaBackend;
 class FNexusNakamaMatchCode;
 
@@ -29,6 +29,9 @@ public:
 	// Set by FNexusNakamaBackend immediately after NewObject<>
 	FNexusNakamaBackend* Owner = nullptr;
 
+	UPROPERTY()
+	UNakamaSession* HeldSession = nullptr;
+	
 	UFUNCTION()
 	void OnAuthSuccess(UNakamaSession* Session);
 
@@ -73,6 +76,12 @@ class NEXUSMULTIPLAYER_API UNexusNakamaMatchProxy : public UObject
 public:
 	FNexusNakamaMatchCode* Owner = nullptr;
 
+	UPROPERTY()
+	UNakamaSession* HeldSession = nullptr;
+
+	UPROPERTY()
+	UNakamaClient* HeldClient = nullptr;
+	
 	UFUNCTION()
 	void OnStoreSuccess(const FNakamaStoreObjectAcks& Acks);
 

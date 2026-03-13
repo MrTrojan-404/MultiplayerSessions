@@ -25,11 +25,26 @@ FNexusNakamaBackend::FNexusNakamaBackend(
     NakamaClient = UNakamaClient::CreateDefaultClient(
         ServerKey, Host, Port, bUseSSL, /*bEnableDebug=*/true);
 
+    if (NakamaClient)
+        NakamaClient->AddToRoot();
+    
     if (!NakamaClient)
         NEXUS_ERROR("[Nakama] Failed to create NakamaClient — check host/port/key");
 
     Proxy = NewObject<UNexusNakamaBackendProxy>(GetTransientPackage());
     Proxy->Owner = this;
+    Proxy->AddToRoot(); // prevent GC from destroying it prematurely
+}
+
+FNexusNakamaBackend::~FNexusNakamaBackend()
+{
+    if (Proxy)
+    {
+        Proxy->HeldSession = nullptr;  // release session ref
+        Proxy->Owner = nullptr;
+        Proxy->RemoveFromRoot();
+        Proxy = nullptr;
+    }
 }
 
 // ── Login — three-tier priority chain ────────────────────────────────────────
@@ -159,6 +174,9 @@ void FNexusNakamaBackend::HandleAuthSuccess(UNakamaSession* Session)
 {
     UserSession = Session;
 
+    if (Proxy)
+        Proxy->HeldSession = Session;
+    
     const TCHAR* ProviderName =
         ActiveProvider == ENexusNakamaAuthProvider::EOSConnect ? TEXT("EOSConnect") :
         ActiveProvider == ENexusNakamaAuthProvider::Steam      ? TEXT("Steam")      :
@@ -557,7 +575,7 @@ bool FNexusNakamaBackend::TryRestoreSession()
         return false;
 
     UNexusNakamaSession* Save = Cast<UNexusNakamaSession>(
-    UGameplayStatics::LoadGameFromSlot(NEXUS_DEVICE_ID_SLOT, 0));
+    UGameplayStatics::LoadGameFromSlot(NEXUS_NAKAMA_SESSION_SLOT, 0));
 
     if (!Save || Save->AuthToken.IsEmpty())
     {
@@ -574,6 +592,9 @@ bool FNexusNakamaBackend::TryRestoreSession()
         return false;
     }
 
+    if (Proxy)
+        Proxy->HeldSession = UserSession;
+    
     NEXUS_SUCCESS("[Nakama] Session restored. Fetching account...");
     FetchAccount();
     return true;

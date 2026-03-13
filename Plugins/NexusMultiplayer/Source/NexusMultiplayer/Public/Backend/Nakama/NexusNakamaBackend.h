@@ -44,6 +44,7 @@ class NEXUSMULTIPLAYER_API FNexusNakamaBackend : public INexusBackendInterface
 public:
     explicit FNexusNakamaBackend(const FString& Host, int32 Port,
     const FString& ServerKey, bool bUseSSL, UGameInstance* InGameInstance);
+    ~FNexusNakamaBackend();
 
     // INexusBackendInterface
     virtual void    Login() override;

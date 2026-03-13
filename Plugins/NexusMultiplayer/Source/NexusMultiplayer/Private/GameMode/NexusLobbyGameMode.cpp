@@ -31,6 +31,8 @@ void ANexusLobbyGameMode::BeginPlay()
         const FString Existing = Sub->GetActiveMatchCode();
         if (!Existing.IsEmpty())
             HandleMatchCodeReady(Existing);
+
+        HostUserId = Sub->GetLocalUserId();
     }
 }
 
@@ -154,7 +156,7 @@ void ANexusLobbyGameMode::AddPlayerToGameState(APlayerController* PC)
     }
 
     // First player to join is the host
-    Info.bIsHost       = (GS->GetPlayerCount() == 0);
+    Info.bIsHost = (Info.UserId == HostUserId);
     Info.bIsLocalPlayer = false; // server context has no local player
 
     NEXUS_LOG("[LobbyGameMode] Adding player: '%s' | UserId='%s' | IsHost=%s",

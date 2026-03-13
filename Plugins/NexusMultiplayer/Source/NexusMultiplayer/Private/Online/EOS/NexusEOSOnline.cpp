@@ -26,6 +26,7 @@ FNexusEOSOnline::FNexusEOSOnline(UGameInstance* InGameInstance)
 
 FNexusEOSOnline::~FNexusEOSOnline()
 {
+    // Clear delegate handles before releasing session interface
     if (SessionInterface.IsValid())
     {
         SessionInterface->ClearOnCreateSessionCompleteDelegate_Handle(CreateSessionHandle);
@@ -34,6 +35,7 @@ FNexusEOSOnline::~FNexusEOSOnline()
         SessionInterface->ClearOnStartSessionCompleteDelegate_Handle(StartSessionHandle);
         SessionInterface->ClearOnDestroySessionCompleteDelegate_Handle(DestroySessionHandle);
     }
+    SessionInterface.Reset();
 }
 
 // ── Identity ──────────────────────────────────────────────────────────────────

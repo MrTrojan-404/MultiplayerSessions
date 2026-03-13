@@ -21,6 +21,7 @@ public:
     // ── USubsystem ────────────────────────────────────────────────────────────
 
     virtual void Initialize(FSubsystemCollectionBase& Collection) override;
+ 
     virtual void Deinitialize() override;
 
     // ── Blueprint API — Session ───────────────────────────────────────────────
@@ -196,4 +197,7 @@ private:
     void HandleTopScoresFetched(FString LeaderboardId, TArray<FNexusLeaderboardEntry> Entries);
     void HandleLeaderboardError(FString Error);
 
+    FDelegateHandle EOSLoginHandle;
+    void HandleEOSLoginComplete(int32 LocalUserNum, bool bWasSuccessful,
+        const FUniqueNetId& UserId, const FString& Error);
 };

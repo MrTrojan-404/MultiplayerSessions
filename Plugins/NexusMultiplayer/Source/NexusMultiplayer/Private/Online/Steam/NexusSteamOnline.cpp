@@ -38,7 +38,7 @@ FNexusSteamOnline::~FNexusSteamOnline()
 
 FString FNexusSteamOnline::GetDisplayName() const
 {
-    IOnlineSubsystem* OSS = IOnlineSubsystem::Get();
+    IOnlineSubsystem* OSS = IOnlineSubsystem::Get(FName("Steam"));
     if (!OSS) return FString();
     IOnlineIdentityPtr Identity = OSS->GetIdentityInterface();
     if (!Identity.IsValid()) return FString();
@@ -47,7 +47,7 @@ FString FNexusSteamOnline::GetDisplayName() const
 
 FString FNexusSteamOnline::GetUserId() const
 {
-    IOnlineSubsystem* OSS = IOnlineSubsystem::Get();
+    IOnlineSubsystem* OSS = IOnlineSubsystem::Get(FName("Steam"));
     if (!OSS) return FString();
     IOnlineIdentityPtr Identity = OSS->GetIdentityInterface();
     if (!Identity.IsValid()) return FString();
@@ -65,7 +65,7 @@ FString FNexusSteamOnline::GetAuthTicket() const
 
 bool FNexusSteamOnline::IsAvailable() const
 {
-    IOnlineSubsystem* OSS = IOnlineSubsystem::Get();
+    IOnlineSubsystem* OSS = IOnlineSubsystem::Get(FName("Steam"));
     if (!OSS) return false;
 
     // OSS loads even without Steam client running — verify client is actually up
@@ -409,12 +409,12 @@ void FNexusSteamOnline::HandleDestroySessionComplete(FName SessionName, bool bWa
 // EnsureSessionInterface — replace Online::GetSubsystem with direct Get()
 bool FNexusSteamOnline::EnsureSessionInterface()
 {
-    // Use IOnlineSubsystem::Get() directly — more reliable in packaged builds
+    // Use IOnlineSubsystem::Get(FName("Steam")) directly — more reliable in packaged builds
     // than the world-context version
-    IOnlineSubsystem* OSS = IOnlineSubsystem::Get();
+    IOnlineSubsystem* OSS = IOnlineSubsystem::Get(FName("Steam"));
     if (!OSS)
     {
-        NEXUS_ERROR("[SteamOnline] IOnlineSubsystem::Get() returned null");
+        NEXUS_ERROR("[SteamOnline] IOnlineSubsystem::Get(Steam)  returned null");
         return false;
     }
     SessionInterface = OSS->GetSessionInterface();
