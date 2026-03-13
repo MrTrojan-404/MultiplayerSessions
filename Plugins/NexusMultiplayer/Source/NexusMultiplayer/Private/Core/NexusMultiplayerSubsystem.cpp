@@ -41,7 +41,7 @@ void UNexusMultiplayerSubsystem::Initialize(FSubsystemCollectionBase& Collection
     if (EOSOSS)
     {
         IOnlineIdentityPtr Identity = EOSOSS->GetIdentityInterface();
-        Identity->Login(0, FOnlineAccountCredentials("persistentauth", "", ""));
+        Identity->Login(0, FOnlineAccountCredentials("accountportal ", "", ""));
     }
     
     SelectLayers();
