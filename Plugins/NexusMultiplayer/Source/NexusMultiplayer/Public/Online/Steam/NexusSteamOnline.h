@@ -25,9 +25,9 @@ public:
     virtual void JoinSessionById(const FString& SessionId) override;
     virtual void DestroySession() override;
     virtual void SetSessionAttribute(const FString& Key, const FString& Value) override;
-
+    
     // Helpers for NexusMultiplayerSubsystem
-    FString GetCurrentSessionId() const;
+    virtual FString GetCurrentSessionId() const override ;
     bool    GetSearchResultById(const FString& SessionId, FOnlineSessionSearchResult& OutResult) const;
     bool    IsSessionPrivate() const { return bLastSessionWasPrivate; }
     int32   GetDesiredPlayerCount() const { return DesiredNumPublicConnections; }

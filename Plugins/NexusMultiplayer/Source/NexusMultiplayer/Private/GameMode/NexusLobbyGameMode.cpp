@@ -8,6 +8,7 @@
 #include "GameFramework/PlayerState.h"
 #include "GameFramework/GameStateBase.h"
 #include "Engine/World.h"
+#include "Interfaces/INexusOnlineInterface.h"
 
 ANexusLobbyGameMode::ANexusLobbyGameMode()
 {
@@ -119,6 +120,15 @@ void ANexusLobbyGameMode::OnLobbyFull_Implementation(
 {
     NEXUS_SUCCESS("[LobbyGameMode] OnLobbyFull — traveling to: %s (MatchType: %s)",
         *GameMapPath, *MatchType);
+
+    if (UNexusMultiplayerSubsystem* Sub = GetSubsystem())
+    {
+        if (INexusOnlineInterface* Online = Sub->GetOnlineLayer())
+        {
+            Online->SetSessionAttribute(TEXT("MapName"), GameMapPath);
+            Online->SetSessionAttribute(TEXT("MatchType"), MatchType);
+        }
+    }
 
     bUseSeamlessTravel = true;
     GetWorld()->ServerTravel(GameMapPath);

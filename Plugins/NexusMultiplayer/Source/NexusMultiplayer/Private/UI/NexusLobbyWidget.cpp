@@ -8,6 +8,7 @@
 #include "Components/Button.h"
 #include "Components/TextBlock.h"
 #include "Components/VerticalBox.h"
+#include "Interfaces/INexusOnlineInterface.h"
 
 
 // ── Init ──────────────────────────────────────────────────────────────────────
@@ -196,6 +197,7 @@ void UNexusLobbyWidget::HandleStartClicked()
     }
 
     const FString GameMap = Sub->GetLastSessionConfig().GameMapPath;
+    const FString MatchType = Sub->GetLastSessionConfig().MatchType;
 
     if (GameMap.IsEmpty())
     {
@@ -208,6 +210,12 @@ void UNexusLobbyWidget::HandleStartClicked()
     SetStatus(TEXT("Starting game..."), FLinearColor::Green);
 
     if (StartButton) StartButton->SetIsEnabled(false);
+
+    if (INexusOnlineInterface* Online = Sub->GetOnlineLayer())
+    {
+        Online->SetSessionAttribute(TEXT("MapName"), GameMap);
+        Online->SetSessionAttribute(TEXT("MatchType"), MatchType);
+    }
 
     GetWorld()->ServerTravel(GameMap);
 }

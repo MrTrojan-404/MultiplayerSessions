@@ -48,7 +48,8 @@ public:
     virtual void    FindSessionByAttribute(const FString& Key, const FString& Value) override;
     virtual void    DestroySession() override;
     virtual void    SetSessionAttribute(const FString& Key, const FString& Value) override;
-
+    virtual FString GetCurrentSessionId() const override;
+    
     virtual FString GetDisplayName() const override;
     virtual FString GetUserId()      const override;
     virtual FString GetAuthTicket()  const override;

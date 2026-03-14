@@ -196,8 +196,13 @@ private:
     void HandleScoreSubmitted(FString LeaderboardId);
     void HandleTopScoresFetched(FString LeaderboardId, TArray<FNexusLeaderboardEntry> Entries);
     void HandleLeaderboardError(FString Error);
+    void ResolveDisplayName();
 
     FDelegateHandle EOSLoginHandle;
     void HandleEOSLoginComplete(int32 LocalUserNum, bool bWasSuccessful,
         const FUniqueNetId& UserId, const FString& Error);
+
+    FTimerHandle DisplayNameRetryTimer;
+    FString CachedDisplayName;
+
 };

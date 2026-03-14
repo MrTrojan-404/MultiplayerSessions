@@ -17,7 +17,7 @@ public:
 	virtual FString GetAuthTicket() const = 0;
 	virtual bool IsAvailable() const = 0;
 	virtual ENexusOnlineMode GetMode() const = 0;
-
+	
 	// Sessions
 	virtual void CreateSession(const FNexusSessionConfig& Config) = 0;
 	virtual void FindSessions(int32 MaxResults) = 0;
@@ -26,6 +26,7 @@ public:
 	virtual void JoinSessionById(const FString& SessionId) = 0;
 	virtual void DestroySession() = 0;
 	virtual void SetSessionAttribute(const FString& Key, const FString& Value) = 0;
+	virtual FString GetCurrentSessionId() const = 0;
 
 	// True for implementations that bypass OSS for discovery (e.g. FNexusNullOnline).
 	// When true, subsystem skips OSS result conversion and calls GetDiscoveredRows().

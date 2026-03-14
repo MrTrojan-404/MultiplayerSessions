@@ -154,6 +154,12 @@ void FNexusNullOnline::SetSessionAttribute(const FString& Key, const FString& Va
     NEXUS_WARN("[NullOnline] SetSessionAttribute no-op on LAN (Key='%s')", *Key);
 }
 
+// Won't be using this anywhere, so return null
+FString FNexusNullOnline::GetCurrentSessionId() const
+{
+   return FString();
+}
+
 // ── Custom Discovery ──────────────────────────────────────────────────────────
 
 void FNexusNullOnline::GetDiscoveredRows(TArray<FNexusServerRow>& OutRows) const

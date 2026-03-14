@@ -138,8 +138,14 @@ void FNexusEOSOnline::CreateSessionInternal(
     LastSessionSettings->bAllowJoinInProgress     = true;
     LastSessionSettings->bAllowJoinViaPresence    = !bIsLAN && !bPrivate;
     LastSessionSettings->bShouldAdvertise         = !bPrivate;
+    LastSessionSettings->bAllowJoinViaPresenceFriendsOnly = false;
     LastSessionSettings->bUsesPresence            = !bIsLAN;
     LastSessionSettings->bUseLobbiesIfAvailable   = !bIsLAN; // EOS supports lobbies too
+    LastSessionSettings->BuildUniqueId = 1;
+    LastSessionSettings->Set(
+    FName("MapName"),
+    FString("Lobby"),
+    EOnlineDataAdvertisementType::ViaOnlineServiceAndPing);
 
     LastSessionSettings->Set(
         FName("MatchType"), MatchType,
@@ -177,9 +183,9 @@ void FNexusEOSOnline::FindSessions(int32 MaxResults)
     LastSessionSearch->bIsLanQuery      = bIsLAN;
 
     // EOS presence-based search — no SEARCH_LOBBIES filter needed unlike Steam
-    if (!bIsLAN)
+    /*if (!bIsLAN)
         LastSessionSearch->QuerySettings.Set(
-            SEARCH_LOBBIES, true, EOnlineComparisonOp::Equals);
+            SEARCH_LOBBIES, true, EOnlineComparisonOp::Equals);*/
 
     if (!SessionInterface->FindSessions(*PlayerId, LastSessionSearch.ToSharedRef()))
     {

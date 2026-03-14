@@ -139,6 +139,10 @@ void FNexusSteamOnline::CreateSessionInternal(
                              bIsLAN
                                  ? EOnlineDataAdvertisementType::ViaPingOnly
                                  : EOnlineDataAdvertisementType::ViaOnlineServiceAndPing);
+    LastSessionSettings->Set(
+    FName("MapName"),
+    FString("Lobby"),
+    EOnlineDataAdvertisementType::ViaOnlineServiceAndPing);
 
     FString DisplayName = GetDisplayName();
     if (!DisplayName.IsEmpty())
